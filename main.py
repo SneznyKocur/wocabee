@@ -9,7 +9,8 @@ from selenium.common.exceptions import StaleElementReferenceException
 from getpass import getpass, getuser
 import time
 import json
-
+import os
+# TODO: progress bars?
 class wocabot:
     def __init__(self,username,password):
         self.word_dictionary = {}
@@ -24,7 +25,7 @@ class wocabot:
 
         
         self._dictionary_Load()
-        print(f"{self.debug} {self.word_dictionary=}")
+        #print(f"{self.debug} {self.word_dictionary=}")
 
         self.username = username
         self.password = password
@@ -43,18 +44,22 @@ class wocabot:
             classes = self.get_classes()
             for id,Class in enumerate(classes):
                 # class is dict of id:button
-                
                 print(id, Class[id].find_element(By.TAG_NAME,"span").text)
                 
             classid = input("ID:")
+            self.wocaclass = str(classid)
             self.pick_class(classid, classes)
             time.sleep(1)
+
             prac = int(input("0: practice, 1: do package 2: learn words 3: Learn ALL words 4: quickclick :"))
+
             if prac < 3:
                 packages = self.get_packages(prac)
+
                 if len(packages) > 1:
                     for id,package in enumerate(packages):
                         print(id,self.driver.find_elements(By.CLASS_NAME,"pTableRow")[id].find_element(By.CLASS_NAME,"package-name").text)
+
                     self.package = self.pick_package(input("ID:"),packages)
                     if int(prac) == 0:
                         self.practice()
@@ -62,22 +67,28 @@ class wocabot:
                         self.learn() 
                 else:
                     self.package = self.pick_package(0, packages)
+
                     if int(prac) == 0:
                         self.practice()
                     if int(prac) == 2:
                         self.learn()
                     if int(prac) == 3:
                         self.learnALL()
+
                 if int(prac) == 1:
                     self.do_package()
+
             elif prac == 3:
                 # learn all
                 self.learnALL()
-            else:
+
+            elif prac == 4:
                 # quickclick
                 self.driver.find_element(By.CLASS_NAME,"btn-info").click()
                 self.driver.find_element(By.ID,"oneAnswerGameStartBtn").click()
                 self.quickclick()
+            else:
+                print(f"{self.err} Invalid Option")
         else:
             print(f"{self.err} Failed to log in.")
         self.driver.quit()
@@ -112,6 +123,17 @@ class wocabot:
     def is_loggedIn(self):
         return self.exists_element(self.driver,By.ID,"logoutBtn")
     
+    def get_element(self,by, element):
+        try:
+            elem = self.driver.find_element(by,element)
+        except:
+            time.sleep(1)
+            try:
+                elem = self.driver.find_element(by,element)
+            except:
+                elem = None
+        return elem
+
     def get_classes(self):
         classeslist = []
         classes = self.driver.find_element(By.ID,"listOfClasses")
@@ -152,29 +174,34 @@ class wocabot:
         return packageslist
             #print(f'{elem.find_element(By.CLASS_NAME,"package-name").text}: {self.exists_element(elem, By.CLASS_NAME, "fa-play-circle")}')
     def pick_package(self,package_id,packages):
+        #print(f"{self.debug} {package_id=} {packages=}")
         package_id = int(package_id)
         packages[package_id][package_id].click()
+        return package_id
     def practice(self):
+        wocapoints = int(self.driver.find_element(By.ID,"WocaPoints").text)
+        target_wocapoints = input("target wocapoints: ")
+
+        if target_wocapoints.startswith("+"):
+            target_wocapoints = wocapoints + int(target_wocapoints.replace("+", ""))
+        else:
+            target_wocapoints = int(target_wocapoints)
+
+
+        difference = target_wocapoints - wocapoints
+        
         
         timelist = []
-        wocapoints = int(self.driver.find_element(By.ID,"WocaPoints").text)
-        target_wocapoints = int(input("target wocapoints: "))
-        difference = target_wocapoints - wocapoints
         pre_time = time.time()
+
+        # switch to 2 wocapoint level
         levelToggle = self.driver.find_element(By.ID,"levelToggle")
         ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
+
         while wocapoints < target_wocapoints:
-            try:
-                wocapoints = int(self.driver.find_element(By.ID,"WocaPoints").text)
-            except:
-                time.sleep(1)
-                try:
-                    wocapoints = int(self.driver.find_element(By.ID,"WocaPoints").text)
-                except:
-                    wocapoints = 0
+            wocapoints = int(self.get_element(By.ID, "WocaPoints").text)
             time.sleep(1)
-            #levelToggle = self.driver.find_element(By.ID,"levelToggle")
-            #ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
+
 
             if target_wocapoints - wocapoints == 1:
                 ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
@@ -183,7 +210,13 @@ class wocabot:
             self.do_exercise()
             times = time.time() - pre
             timelist.append(times)
-            print(f"{self.info} {wocapoints} points / {target_wocapoints} = {round(wocapoints/target_wocapoints*100,1)}% in {round(times,1)}s (AVG:{round(sum(timelist)/len(timelist),1)}) ETA:{round(difference*(sum(timelist)/len(timelist))/60)}min",end="\r")
+
+            os.system("clear")
+            print(f"""{self.info} {wocapoints} points / {target_wocapoints} = {round(wocapoints/target_wocapoints*100,1)}%
+            in {round(times,1)}s
+            (AVG:{round(sum(timelist)/len(timelist),1)})
+            ETA:{round(difference*(sum(timelist)/len(timelist))/60)}min
+            """)
         self.driver.find_element(By.ID,"backBtn").click()
         print(f"{self.ok} Finished {difference} points in {int(time.time())-int(pre_time)}")
 
@@ -206,7 +239,7 @@ class wocabot:
 
     def learn(self):
         while self.exists_element(self.driver, By.ID, "intro"):
-            print(f"{self.info} adding words to dictionary")
+            
             word = self.driver.find_element(By.ID,"word").text
             translation = self.driver.find_element(By.ID,"translation").text
       
@@ -220,7 +253,8 @@ class wocabot:
                 return
         
 
-    def quickclick(self):
+
+    def quickclick(self): # ja neviem čo toto je to som mal asi 20 promile = self.jls_extract_def()
         ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
         while self.exists_element(self.driver, By.ID, "oneAnswerGameSecondsLeft"):
             WebDriverWait(self.driver, 10).until(
@@ -259,16 +293,14 @@ class wocabot:
                     print(f"{self.ok} Guess was right!")
                     self.dictionary_put(preword, correct_maybe,self.package)
             time.sleep(1)
-    def find_missing_letters(self,miss,maian):
-        print(miss,maian)
+
+    def find_missing_letters(self,missing,word):
         end = ""
-        for i,x in enumerate(miss):
+        for i,x in enumerate(missing):
             if x == "_":
-                end+=maian[i]
+                end+=word[i]
         return end
-    def do_exercises(self):
-        while True:
-            self.do_exercise()
+
     def do_exercise(self):
         # listening skip
         if self.exists_element(self.driver, By.ID, "transcribeSkipBtn"):
@@ -281,26 +313,30 @@ class wocabot:
             if translated:
                 self.elem_type(By.ID, "translateWordAnswer", translated)
                 self.driver.find_element(By.ID,"translateWordSubmitBtn").click()
+
             else:
                 print(f"{self.warn} Word Not in dictionary {word}")
                 self.elem_type(By.ID, "translateWordAnswer", "omg")
                 self.driver.find_element(By.ID,"translateWordSubmitBtn").click()
                 time.sleep(1)
+                # add correct word to dictionary
                 word = self.driver.find_element(By.CLASS_NAME,"correctWordQuestion").text
                 translation = self.driver.find_element(By.CLASS_NAME,"correctWordAnswer").text
                 self.dictionary_put(word,translation,self.package)
                 self.driver.find_element(By.ID,"incorrect-next-button").click()
 
+        # falling word (only in practice?)
         if self.exists_element(self.driver, By.ID, "tfw_word"):
             word = self.driver.find_element(By.ID,"tfw_word").text
             if self.dictionary_get(word,self.package):
                 self.elem_type(By.ID, "translateFallingWordAnswer", self.dictionary_get(word,self.package))
                 self.driver.find_element(By.ID,"translateFallingWordSubmitBtn").click()
             else:
+                print(f"{self.warn} Word Not in dictionary {word}")
                 self.elem_type(By.ID, "translateFallingWordAnswer", "omg")
                 self.driver.find_element(By.ID,"translateFallingWordSubmitBtn").click()
-                print(f"{self.warn} Word Not in dictionary {word}")
                 time.sleep(1)
+                # add correct word to dictionary
                 word = self.driver.find_element(By.CLASS_NAME,"correctWordQuestion").text
                 translation = self.driver.find_element(By.CLASS_NAME,"correctWordAnswer").text
                 self.dictionary_put(word,translation,self.package)
@@ -319,6 +355,7 @@ class wocabot:
                 print(f"{self.err} Word not in dictionary")
                 answers[0].click()
                 time.sleep(1)
+                # add correct word to dictionary
                 word = self.driver.find_element(By.CLASS_NAME,"correctWordQuestion").text
                 translation = self.driver.find_element(By.CLASS_NAME,"correctWordAnswer").text
                 self.dictionary_put(word,translation,self.package)
@@ -339,15 +376,16 @@ class wocabot:
                             letter.click()
             else:
                 print(f"{self.err} Word not in dictionary")
-                letters[0].click()
-                letters[1].click()
+                # click letters:
+                for i in range(miss.text.count("_")):
+                    letters[i].click()
+
                 time.sleep(1)
                 word = self.driver.find_element(By.CLASS_NAME,"correctWordQuestion").text
                 translation = self.driver.find_element(By.CLASS_NAME,"correctWordAnswer").text
                 self.dictionary_put(word,translation,self.package)
                 self.driver.find_element(By.ID,"incorrect-next-button").click()
 
-        # nove sracky
         # pexeso
         while self.exists_element(self.driver,By.ID, "pexeso"):
             words = {}
@@ -356,8 +394,10 @@ class wocabot:
             translatebuttons = self.driver.find_elements(By.CLASS_NAME,"btn-primary")
             for word in wordbuttons:
                 words.update({word.text,word})
+
             for translation in translatebuttons:
                 translations.update({translation.text,translation})
+
             for x in words:
                 if self.dictionary_get(x,self.package):
                     if self.dictionary_get(x) in translations:
@@ -421,20 +461,21 @@ class wocabot:
                 else:
                     words = False
             while i<3:
-                self.do_exercises()
+                self.do_exercise()
             i+=1
         else:
             print(f"{self.warn} Package has been already started before, words may not be in dictionary!")
             while i<3:
-                self.do_exercises()
+                self.do_exercise()
             i+=1
     def dictionary_get(self,word:str,package) -> str | None:
-        self._dictionary_Load()
-        if word in self.word_dictionary.keys():
-            return self.word_dictionary[package][word]
-        elif word in self.word_dictionary[package].values():
-            for x in self.word_dictionary[package]:
-                if self.word_dictionary[package][x] == word:
+        package = str(package)
+        #print(f"{self.debug} {word=}, {package=}")
+        if word in self.word_dictionary[self.wocaclass][package].keys():
+            return self.word_dictionary[self.wocaclass][package][word]
+        elif word in self.word_dictionary[self.wocaclass][package].values():
+            for x in self.word_dictionary[self.wocaclass][package]:
+                if self.word_dictionary[self.wocaclass][package][x] == word:
                     return x
                 else:
                     continue
@@ -444,13 +485,15 @@ class wocabot:
         package = str(package)
         if not word or not translation:
             return
-        if not package in self.word_dictionary.keys():
-                self.word_dictionary.update({package:{}})
+        if not self.wocaclass in self.word_dictionary.keys():
+                self.word_dictionary.update({self.wocaclass:{}})
+        if not package in self.word_dictionary[self.wocaclass].keys():
+            self.word_dictionary[self.wocaclass].update({package:{}})
         
-        if not word in self.word_dictionary[package]:
+        if not word in self.word_dictionary[self.wocaclass][package]:
             print(f"{self.ok} Adding New word to dictionary: {word} = {translation}")
             
-            self.word_dictionary[package].update({word:translation})
+            self.word_dictionary[self.wocaclass][package].update({word:translation})
         else:
             print(f"{self.warn} Word Already in dictionary!")
         self._dictionary_Save()
@@ -462,3 +505,4 @@ class wocabot:
         with open(self.dictionary_path,"w") as f:
             json.dump(self.word_dictionary,f,indent=2)
 Wocabot = wocabot(input("Username:"),getpass("Password:"))
+# https://github.com/SneznyKocur/wocabot
