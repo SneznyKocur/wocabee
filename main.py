@@ -10,6 +10,8 @@ from getpass import getpass, getuser
 import time
 import json
 import os
+
+from tqdm import tqdm
 # TODO: progress bars?
 class wocabot:
     def __init__(self,username,password):
@@ -122,18 +124,52 @@ class wocabot:
                 return False
     def is_loggedIn(self):
         return self.exists_element(self.driver,By.ID,"logoutBtn")
-    
+
+
+    def fail_practice(self):
+        WebDriverWait(self.driver, 10).until(lambda x: self.driver.find_element(By.ID, "tfw_word").is_displayed())
+        self.elem_type(By.ID, "translateFallingWordAnswer", "omg")
+        self.driver.find_element(By.ID,"translateFallingWordSubmitBtn").click()
+        self.driver.find_element(By.ID,"incorrect-next-button").click()
+
+    def calculate_words(self,diff_wocapoints):
+        target_points = diff_wocapoints
+        target_bonus = 5
+        target_word_count = 0
+        total = 0
+        current_bonus = 0
+        for i in range(diff_wocapoints):
+            if i >= target_bonus:
+                current_bonus += target_bonus
+                target_bonus *= 2        
+
+            total = i*2 + current_bonus
+            #print(f"{self.debug} {i=} {current_bonus=} {total=} {target_points=} {target_word_count=}")
+            if total < target_points:
+                target_word_count+=1
+            else:
+                break
+        return target_word_count-1
+
     def get_element(self,by, element):
         try:
             elem = self.driver.find_element(by,element)
         except:
-            time.sleep(1)
-            try:
-                elem = self.driver.find_element(by,element)
-            except:
-                elem = None
-        return elem
+            elem = 0
+        if elem and elem != "":
+            return elem
+        else:
+            return 0
 
+    def get_element_text(self,by, element):
+        try:
+            elem = self.driver.find_element(by,element).text
+        except:
+            elem = 0
+        if elem and elem != "":
+            return elem
+        else:
+            return 0
     def get_classes(self):
         classeslist = []
         classes = self.driver.find_element(By.ID,"listOfClasses")
@@ -179,6 +215,9 @@ class wocabot:
         packages[package_id][package_id].click()
         return package_id
     def practice(self):
+
+        save = True
+
         wocapoints = int(self.driver.find_element(By.ID,"WocaPoints").text)
         target_wocapoints = input("target wocapoints: ")
 
@@ -190,35 +229,51 @@ class wocabot:
 
         difference = target_wocapoints - wocapoints
         
-        
-        timelist = []
-        pre_time = time.time()
+        print(f"{self.info} Doing {difference} wocapoints ({wocapoints} -> {target_wocapoints})")
 
         # switch to 2 wocapoint level
         levelToggle = self.driver.find_element(By.ID,"levelToggle")
         ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
 
-        while wocapoints < target_wocapoints:
-            wocapoints = int(self.get_element(By.ID, "WocaPoints").text)
-            time.sleep(1)
-
-
+        for i in tqdm(range(int(self.calculate_words(difference)))):
+            pre_wocapoints = wocapoints # save 
+            wocapoints = self.get_element_text(By.ID, "WocaPoints")
+            if not wocapoints:
+                wocapoints = pre_wocapoints
+            else:
+                wocapoints = int(wocapoints)
+            
             if target_wocapoints - wocapoints == 1:
                 ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
-            
-            pre = time.time()
-            self.do_exercise()
-            times = time.time() - pre
-            timelist.append(times)
 
-            os.system("clear")
-            print(f"""{self.info} {wocapoints} points / {target_wocapoints} = {round(wocapoints/target_wocapoints*100,1)}%
-            in {round(times,1)}s
-            (AVG:{round(sum(timelist)/len(timelist),1)})
-            ETA:{round(difference*(sum(timelist)/len(timelist))/60)}min
-            """)
-        self.driver.find_element(By.ID,"backBtn").click()
-        print(f"{self.ok} Finished {difference} points in {int(time.time())-int(pre_time)}")
+
+            # TODO: when in 1st level there may not be a falling word so this wont work    
+            WebDriverWait(self.driver, 10).until(lambda x: self.driver.find_element(By.ID, "tfw_word").is_displayed())
+            self.do_exercise()
+
+
+        difference = target_wocapoints - wocapoints
+        self.fail_practice()
+
+        for i in tqdm(range(int(self.calculate_words(difference-2)))):
+            pre_wocapoints = wocapoints # save 
+            wocapoints = self.get_element_text(By.ID, "WocaPoints")
+            if not wocapoints:
+                wocapoints = pre_wocapoints
+            else:
+                wocapoints = int(wocapoints)
+            
+            if target_wocapoints - wocapoints == 1:
+                ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
+
+
+            # TODO: when in 1st level there may not be a falling word so this wont work    
+            WebDriverWait(self.driver, 10).until(lambda x: self.driver.find_element(By.ID, "tfw_word").is_displayed())
+            self.do_exercise()
+        
+        
+        if save:
+            self.driver.find_element(By.ID,"backBtn").click()
 
     def learnALL(self):
         packagelist = self.get_packages(2)
@@ -335,7 +390,7 @@ class wocabot:
                 print(f"{self.warn} Word Not in dictionary {word}")
                 self.elem_type(By.ID, "translateFallingWordAnswer", "omg")
                 self.driver.find_element(By.ID,"translateFallingWordSubmitBtn").click()
-                time.sleep(1)
+                
                 # add correct word to dictionary
                 word = self.driver.find_element(By.CLASS_NAME,"correctWordQuestion").text
                 translation = self.driver.find_element(By.CLASS_NAME,"correctWordAnswer").text
@@ -471,14 +526,13 @@ class wocabot:
     def dictionary_get(self,word:str,package) -> str | None:
         package = str(package)
         #print(f"{self.debug} {word=}, {package=}")
-        if word in self.word_dictionary[self.wocaclass][package].keys():
-            return self.word_dictionary[self.wocaclass][package][word]
-        elif word in self.word_dictionary[self.wocaclass][package].values():
-            for x in self.word_dictionary[self.wocaclass][package]:
-                if self.word_dictionary[self.wocaclass][package][x] == word:
-                    return x
-                else:
-                    continue
+        dictionary = self.word_dictionary[self.wocaclass][package]
+
+        if word in dictionary.keys():
+            return dictionary[word]
+        elif word in dictionary.values():
+            return list(dictionary.values())[
+                list(dictionary.keys()).index(word)]
         else:
             return None
     def dictionary_put(self,word:str,translation:str,package) -> int:
