@@ -12,7 +12,7 @@ import json
 import os
 
 from tqdm import tqdm
-# TODO: progress bars?
+# TODO: progress bar in package
 class wocabot:
     def __init__(self,username,password):
         self.word_dictionary = {}
@@ -265,11 +265,10 @@ class wocabot:
             
             if target_wocapoints - wocapoints == 1:
                 ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
-
-
-            # TODO: when in 1st level there may not be a falling word so this wont work    
-            WebDriverWait(self.driver, 10).until(lambda x: self.driver.find_element(By.ID, "tfw_word").is_displayed())
-            self.do_exercise()
+                self.do_exercise()
+            else:
+                WebDriverWait(self.driver, 10).until(lambda x: self.driver.find_element(By.ID, "tfw_word").is_displayed())
+                self.do_exercise()
         
         
         if save:
@@ -277,78 +276,60 @@ class wocabot:
 
     def learnALL(self):
         packagelist = self.get_packages(2)
-        i = 0
-        while i < len(packagelist):
+        for i in tqdm(range(len(packagelist))):
             WebDriverWait(self.driver, 10,ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "pTableRow"))) # wait until we can pick a package
+                            lambda x: self.driver.find_element(By.CLASS_NAME, "pTableRow").is_displayed()) # wait until we can pick a package
             time.sleep(1)
             packagelist = self.get_packages(2)
             package = packagelist[i]
             package_ID = list(package.keys())[0]
             # package is dict of {id: button}
             self.package = package_ID
-            print(f"{self.ok} Learning all words from package {self.pkgID_to_name(package_ID)}...")
             self.pick_package(list(package.keys())[0], packagelist)
-            self.learn()
-            i+=1
+            self.learn(False)
 
-    def learn(self):
+    def learn(self,echo = False):
         while self.exists_element(self.driver, By.ID, "intro"):
-            
+            WebDriverWait(self.driver,10).until(lambda x: self.driver.find_element(By.ID,"word").is_displayed())
             word = self.driver.find_element(By.ID,"word").text
             translation = self.driver.find_element(By.ID,"translation").text
-      
-            self.dictionary_put(word, translation,self.package)
-            time.sleep(1)
-            if self.exists_element(self.driver, By.ID, "rightArrow"):
+            self.dictionary_put(word, translation,self.package,echo)
+
+            try: 
                 self.driver.find_element(By.ID,"rightArrow").click()
-            else:
+            except:
+                word = self.driver.find_element(By.ID,"word").text
+                translation = self.driver.find_element(By.ID,"translation").text
+                self.dictionary_put(word, translation,self.package,echo)
                 # return to menu
                 self.driver.find_element(By.ID,"backBtn").click()
                 return
-        
 
 
-    def quickclick(self): # ja neviem čo toto je to som mal asi 20 promile = self.jls_extract_def()
+
+    def quickclick(self): # ja neviem čo toto je to som mal asi 20 promile
         ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
         while self.exists_element(self.driver, By.ID, "oneAnswerGameSecondsLeft"):
-            WebDriverWait(self.driver, 10).until(
-                            EC.presence_of_element_located((By.ID, "oneOutOfManyQuestionWord")))
+            WebDriverWait(self.driver, 10,ignored_exceptions=ignored_exceptions).until(
+                            lambda x: self.driver.find_element(By.ID, "oneOutOfManyQuestionWord").is_displayed())
             word = self.driver.find_element(By.ID,"oneOutOfManyQuestionWord")
-            preword = word.text
             translations = self.driver.find_elements(By.CLASS_NAME,"oneOutOfManyWord")
-            if self.dictionary_get(word.text,self.package):
+            preklad = self.dictionary_get(word.text)
+            print(f"{preklad=} {word.text=}")
+            if preklad:
                 for translation in translations:
-                    translation = WebDriverWait(self.driver, 10,ignored_exceptions=ignored_exceptions)\
-                        .until(EC.presence_of_element_located((By.CLASS_NAME,"oneOutOfManyWord")))
-                    if self.dictionary_get(word.text,self.package) == translation.text:
-                        ActionChains(self.driver).move_to_element(translation).click().perform()
+                    if preklad == translation.text:
+                        translation.click()
             
-            
+            # what,
             else:
-                WebDriverWait(self.driver, 10).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "oneOutOfManyWord")))
-                
-                time.sleep(1) # wait for animation to finish
-                ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
-                translations = WebDriverWait(self.driver, 10,ignored_exceptions=ignored_exceptions)\
-                        .until(EC.presence_of_element_located((By.CLASS_NAME,"oneOutOfManyWord")))
-
-                correct_maybe = translations.text
-                
-                ActionChains(self.driver).move_to_element(translations).click().perform()
-                #translations[0].click()
                 print(f"{self.err} Word not in dictionary")
-                if self.exists_element(self.driver, By.ID, "incorrect-next-button"):
-                    word = self.driver.find_element(By.CLASS_NAME,"correctWordQuestion").text
-                    translation = self.driver.find_element(By.CLASS_NAME,"correctWordAnswer").text
-                    self.dictionary_put(word,translation,self.package)
-                    self.driver.find_element(By.ID,"incorrect-next-button").click()
+                if self.dictionary_get(translations[0].text):
+                    translations[1].click()
                 else:
-                    print(f"{self.ok} Guess was right!")
-                    self.dictionary_put(preword, correct_maybe,self.package)
-            time.sleep(1)
-
+                    translations[0].click()
+                if self.exists_element(self.driver, By.ID, "incorrect-next-button"):
+                    self.driver.find_element(By.ID,"incorrect-next-button").click()
     def find_missing_letters(self,missing,word):
         end = ""
         for i,x in enumerate(missing):
@@ -357,6 +338,9 @@ class wocabot:
         return end
 
     def do_exercise(self):
+        # TODO: pictures
+
+
         # listening skip
         if self.exists_element(self.driver, By.ID, "transcribeSkipBtn"):
             self.driver.find_element(By.ID,"transcribeSkipBtn").click()
@@ -523,19 +507,30 @@ class wocabot:
             while i<3:
                 self.do_exercise()
             i+=1
-    def dictionary_get(self,word:str,package) -> str | None:
-        package = str(package)
+    def dictionary_get(self,word:str,package = "") -> str | None:
         #print(f"{self.debug} {word=}, {package=}")
+        if not package:
+            for x in self.word_dictionary[self.wocaclass]:
+                #print(x)
+                dictionary = self.word_dictionary[self.wocaclass][x]
+
+                if word in dictionary.keys():
+                    return dictionary[word]
+                elif word in dictionary.values():
+                    return list(dictionary.keys())[
+                        list(dictionary.values()).index(word)]
+            return None
+        package = str(package)
         dictionary = self.word_dictionary[self.wocaclass][package]
 
         if word in dictionary.keys():
             return dictionary[word]
         elif word in dictionary.values():
-            return list(dictionary.values())[
-                list(dictionary.keys()).index(word)]
+            return list(dictionary.keys())[
+                list(dictionary.values()).index(word)]
         else:
             return None
-    def dictionary_put(self,word:str,translation:str,package) -> int:
+    def dictionary_put(self,word:str,translation:str,package,echo = True) -> int:
         package = str(package)
         if not word or not translation:
             return
@@ -545,10 +540,11 @@ class wocabot:
             self.word_dictionary[self.wocaclass].update({package:{}})
         
         if not word in self.word_dictionary[self.wocaclass][package]:
-            print(f"{self.ok} Adding New word to dictionary: {word} = {translation}")
+            if echo:
+                print(f"{self.ok} Adding New word to dictionary: {word} = {translation}")
             
             self.word_dictionary[self.wocaclass][package].update({word:translation})
-        else:
+        elif echo:
             print(f"{self.warn} Word Already in dictionary!")
         self._dictionary_Save()
     def _dictionary_Load(self):
