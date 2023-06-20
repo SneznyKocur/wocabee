@@ -24,6 +24,12 @@ class wocabot:
         self.info = "[#]"
         self.debug = "[D]"
 
+        self.PRACTICE = 0
+        self.DOPACKAGE = 1
+        self.LEARN = 2
+        self.LEARNALL = 3
+        self.GETPACKAGE = 4
+
         print(f"{self.ok} Loading dictionary from file")
 
         
@@ -38,70 +44,52 @@ class wocabot:
         self.driver = webdriver.Firefox()
         self.driver.get(self.url)
 
-        print(f"{self.ok} Trying to login...")
+        print(f"{self.ok} Trying to login")
 
         self.Woca_login(username, password)
-        if self.is_loggedIn():
-            print(f"{self.ok} Succesfully logged in...")
-            classid = self.args.classid
-
-            self.wocaclass = str(classid)
+        if not self.is_loggedIn():
+            print(f"{self.err} Failed to log in")
+        
+        if self.args.getclasses:
             classes = self.get_classes()
-            self.pick_class(classid, classes)
+            for id,Class in enumerate(classes):
+                # class is dict of id:button
+                
+                print(id, Class[id].find_element(By.TAG_NAME,"span").text)
+            return
+        elif not self.args.classid:
+            print(f"{self.err} Class is required to proceed!")
+            return
+        self.wocaclass = self.args.classid
+        self.pick_class(self.wocaclass,self.get_classes())
+        
+        self.package = self.args.package
 
-            if not self.args.do_package and not self.args.practice and not self.args.quickclick and not self.args.learn and not self.args.learnall:
-                prac = int(input("0: practice, 1: do package 2: learn words 3: Learn ALL words 4: quickclick :"))
-            else:
-                if self.args.practice:
-                    prac = 0
-                elif self.args.do_package:
-                    prac = 1
-                elif self.args.learn:
-                    prac = 2
-                elif self.args.learnall:
-                    prac = 3
-                elif self.args.quickclick:
-                    prac = 4
+        if self.args.practice:
+            self.package = 0
+            self.practice(self.args.target_points)
+        elif self.args.do_package:
+            packages = self.get_packages(self.DOPACKAGE)
+            self.package = self.pick_package(int(self.args.package),packages)
             
-            if not self.args.package and self.args.practice:
-                self.package = 0
-            elif self.args.learnall:
-                self.learnALL()
-            elif not self.args.package and not self.args.quickclick:
-                packages = self.get_packages(prac)
-
-                if len(packages) > 1:
-                    for id,package in enumerate(packages):
-                        print(id,self.driver.find_elements(By.CLASS_NAME,"pTableRow")[id].find_element(By.CLASS_NAME,"package-name").text)
-
-                    self.package = self.pick_package(input("ID:"),packages)
-                else:
-                    self.package = self.pick_package(0, packages)
-            elif not self.args.quickclick:
-                packages = self.get_packages(prac)
-                print("calling pick package")
-                self.package = self.pick_package(int(self.args.package),packages)
-            
-            if int(prac) == 0:
-                # TODO: we shouldn't be needing to do this
-                if not self.package:
-                    packages = self.get_packages(prac)
-                    self.package = self.pick_package(0,packages)
-                self.practice(self.args.target_points)
-            elif int(prac) == 1:
-                self.do_package()
-            elif int(prac) == 2:
-                self.learn() 
-            elif int(prac) == 4:
-                # quickclick
-                self.driver.find_element(By.CLASS_NAME,"btn-info").click()
-                self.driver.find_element(By.ID,"oneAnswerGameStartBtn").click()
-                self.quickclick(self.args.target_points)
-
-            else:
-                print(f"{self.err} Invalid Option")
+        elif self.args.learn:
+            self.learn()
+        elif self.args.learnall:
+            self.learnALL()
+        elif self.args.quickclick:
+            self.driver.find_element(By.CLASS_NAME,"btn-info").click()
+            self.driver.find_element(By.ID,"oneAnswerGameStartBtn").click()
+            self.quickclick(self.args.target_points)
+        elif self.args.getpackages:
+            for i,x in enumerate(self.get_packages(self.GETPACKAGE)):
+                k,v = x
+                print(f"Package: {i} = {k} Playable: {v}")
+        elif self.args.leaderboard:
+            first_place = self.get_leaderboard()[0]
+            for x in self.get_leaderboard():
+                print(f"#{x['place']}: {x['name']} with {x['points']} points (diff to #1 = {int(first_place['points'])-int(x['points'])})")
         else:
-            print(f"{self.err} Failed to log in.")
+            print(f"{self.err} Nothing to do")
         self.driver.quit()
 
     def pkgID_to_name(self,pkgID:int):
@@ -131,7 +119,11 @@ class wocabot:
             except:
                 return False
     def is_loggedIn(self):
-        return self.exists_element(self.driver,By.ID,"logoutBtn")
+        try:
+            return WebDriverWait(self.driver, 5).until(lambda x: self.driver.find_element(By.ID, "logoutBtn").is_displayed())
+        except:
+            return False
+        
 
 
     def fail_practice(self):
@@ -152,7 +144,6 @@ class wocabot:
                 target_bonus *= 2        
 
             total = i*2 + current_bonus
-            #print(f"{self.debug} {i=} {current_bonus=} {total=} {target_points=} {target_word_count=}")
             if total < target_points:
                 target_word_count+=1
             else:
@@ -191,36 +182,41 @@ class wocabot:
         class_id = int(class_id)
         classes[class_id][class_id].click()
 
+    def get_leaderboard(self):
+        leaderboard = []
+        wrapper = WebDriverWait(self.driver, 5).until(lambda x: self.driver.find_element(By.ID,"listOfStudentsWrapper").is_displayed())
+
+        for i in range(len(self.driver.find_element(By.ID,"listOfStudentsWrapper").find_element(By.ID,"tbody").find_elements(By.TAG_NAME,"tr"))):
+            elem = WebDriverWait(self.driver, 5,ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)).until(
+                            EC.presence_of_element_located((By.ID,"tbody"))).find_elements(By.TAG_NAME,"tr")[i] 
+            try:
+                leaderboard.append({"place":elem.find_element(By.CLASS_NAME,"place").text,"name":elem.find_element(By.CLASS_NAME,"name").text,"points":elem.find_elements(By.TAG_NAME,"td")[2].text})
+            except StaleElementReferenceException:
+                pass
+        return leaderboard
     def get_packages(self, prac):
         i = 0
         prac = int(prac)
-        if prac == 3: # learn all = learn
-            prac = 2 
+        if prac == self.LEARNALL: # learn all = learn
+            prac = self.LEARN
         packageslist = []
+        if prac == self.GETPACKAGE:
+            for elem in self.driver.find_elements(By.CLASS_NAME,"pTableRow"):
+                packageslist.append({elem.find_element(By.CLASS_NAME,"package-name").text: self.exists_element(elem, By.CLASS_NAME, "fa-play-circle")})
 
-        if prac == 1:
+        if prac == self.DOPACKAGE:
             for elem in self.driver.find_elements(By.CLASS_NAME,"pTableRow")[:10]:
                 if self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
                     button = elem.find_element(By.CLASS_NAME,"package ").find_element(By.TAG_NAME,"a")
-                    print(i)
                     packageslist.append({i:button})
                     i+=1
-                else:
-                    print(f"what {i=} {packageslist=}")
-        elif prac == 0:
-            for elem in self.driver.find_elements(By.CLASS_NAME,"pTableRow")[:10]:
-                if self.exists_element(elem, By.CLASS_NAME, "fa-gamepad"):
-                    button = elem.find_element(By.CLASS_NAME,"btn-primary")
-                    packageslist.append({i:button})
-                    i+=1
-        elif prac == 2:
+        elif prac == self.LEARN:
             for elem in self.driver.find_elements(By.CLASS_NAME,"pTableRow"):
                 if self.exists_element(elem, By.TAG_NAME, "a"):
                     button = elem.find_element(By.TAG_NAME, "a")
                     packageslist.append({i:button})
                     i+=1
         return packageslist
-            #print(f'{elem.find_element(By.CLASS_NAME,"package-name").text}: {self.exists_element(elem, By.CLASS_NAME, "fa-play-circle")}')
     def pick_package(self,package_id,packages):
         #print(f"{self.debug} {package_id=} {packages=}")
         package_id = int(package_id)
@@ -323,8 +319,11 @@ class wocabot:
     def quickclick(self,target_points = None): # ja neviem čo toto je to som mal asi 20 promile
         if not target_points:
             target_points = int(input("points:"))
-        else:
+        elif not "+" in target_points:
             target_points = int(target_points)
+        else:
+            print(f"{self.err} Cant use {target_points} in quickclick")
+            return
         ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
         while self.exists_element(self.driver, By.ID, "oneAnswerGameSecondsLeft"):
             current_points = int(self.get_element_text(By.ID, "oneAnswerGameCounter"))
@@ -596,7 +595,6 @@ class wocabot:
 
         return None
     def dictionary_put(self,word:str,translation:str,echo = True,*args,**kwargs) -> int:
-        # TODO: list cant be a key so put translation first if its not a list and word as a key  
         if not word or not translation:
             return
         if not self.wocaclass in self.word_dictionary.keys():
@@ -650,10 +648,14 @@ parser.add_argument("-p","--pass","--password",dest="password",required=True)
 parser.add_argument("--practice",action='store_true',dest="practice",required=False)
 parser.add_argument("--quickclick",action='store_true',dest="quickclick",required=False)
 parser.add_argument("--points",dest="target_points",required=False)
-parser.add_argument("--class",dest="classid",required=True)
+parser.add_argument("--class",dest="classid",required=False)
 parser.add_argument("--package",dest="package",required=False)
 parser.add_argument("--do-package",action='store_true',dest="do_package",required=False)
-parser.add_argument("--learnall",action="store_true",dest="learnall",required=False)
+parser.add_argument("--learn-all",action="store_true",dest="learnall",required=False)
 parser.add_argument("--learn",action="store_true",dest="learn",required=False)
+parser.add_argument("--get-classes","--classes",action="store_true",dest="getclasses",required=False)
+parser.add_argument("--get-packages","--packages",action="store_true",dest="getpackages",required=False)
+parser.add_argument("--get-leaderboard","--leaderboard",action="store_true",dest="leaderboard")
 args = parser.parse_args()
+
 Wocabot = wocabot(username=args.username,password=args.password,args=args)
