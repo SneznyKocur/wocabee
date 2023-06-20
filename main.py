@@ -43,7 +43,7 @@ class wocabot:
         self.Woca_login(username, password)
         if self.is_loggedIn():
             print(f"{self.ok} Succesfully logged in...")
-            classid = args.classid
+            classid = self.args.classid
 
             self.wocaclass = str(classid)
             classes = self.get_classes()
@@ -371,7 +371,7 @@ class wocabot:
         return end
 
     def do_exercise(self):
-        # TODO: THIS DOESNT GET CALLED UNLESS THE PICTURE IS MANUALLY CLICKED
+        # FIXME: THIS DOESNT GET CALLED UNTIL THE PICTURES ARE CLICKED
         if self.exists_element(self.driver,By.CLASS_NAME,"picture"):
             # answer = ""
             # question = self.get_element_text(By.ID,"choosePictureWord")
