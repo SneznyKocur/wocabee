@@ -162,4 +162,4 @@ cython_debug/
 # selenium
 geckodriver.log
 
-dict.json
+*.json

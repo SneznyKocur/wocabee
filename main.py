@@ -17,7 +17,7 @@ import random
 class wocabot:
     def __init__(self,username,password,args):
         self.word_dictionary = {}
-        self.dictionary_path = "dict.json"
+        self.dictionary_path = "../wocabee archive/8.A.json"
         self.ok = "[+]"
         self.warn = "[!]"
         self.err = "[-]"
