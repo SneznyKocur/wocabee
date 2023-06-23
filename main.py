@@ -610,4 +610,4 @@ parser.add_argument("--get-packages","--packages",action="store_true",dest="getp
 parser.add_argument("--get-leaderboard","--leaderboard",action="store_true",dest="leaderboard")
 args = parser.parse_args()
 
-Wocabot = wocabot(username=args.username or "jhuttman1",password=args.password or "Kubstein",args=args)
+Wocabot = wocabot(username=args.username,password=args.password,args=args)
