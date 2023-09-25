@@ -2,10 +2,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
-import time, json
+import time, json, os, datetime
 from tqdm import tqdm
 import argparse
-import googletrans
 class wocabot:
     def __init__(self,username,password,args):
         self.args = args
@@ -13,6 +12,7 @@ class wocabot:
         self.password = password
 
         self.word_dictionary = {}
+        self.tracker_path = "../wocabee archive/track.json"
         self.dictionary_path = "../wocabee archive/8.A.json"
         self.url = "https://wocabee.app/app"
 
@@ -32,7 +32,6 @@ class wocabot:
         self.driver = webdriver.Firefox()
         self.driver.get(self.url)
 
-        self.translator = googletrans.Translator()
         print(f"{self.ok} Logging in...")
         self.login(self.username,self.password)
         if not self.is_loggedIn():
@@ -54,12 +53,13 @@ class wocabot:
         self.pick_class(self.wocaclass,self.get_classes())
         
         self.package = self.args.package
-    
+
         if self.args.practice:
             self.package = 0
             self.pick_package(self.package,self.get_packages(self.PRACTICE))
             self.practice(self.args.target_points)
-
+        elif self.args.tracker:
+            self.track()
         elif self.args.do_package:
             packages = self.get_packages(self.DOPACKAGE)
             self.package = self.pick_package(int(self.args.package),packages)
@@ -80,9 +80,11 @@ class wocabot:
                 k,v = x
                 print(f"Package: {i} = {k} Playable: {v}")
         elif self.args.leaderboard:
-            first_place = self.get_leaderboard()[0]
-            for x in self.get_leaderboard():
-                print(f"#{x['place']}: {x['name']} with {x['points']} points (diff to #1 = {int(first_place['points'])-int(x['points'])})")
+            leaderboard = self.get_leaderboard()
+            first_place = leaderboard[0]
+            len_points = len(first_place["points"])
+            for x in leaderboard:
+                print(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴'}) {x['points']:<3} (diff to #1 = {int(first_place['points'])-int(x['points'])})")
         else:
             print(f"{self.err} Nothing to do")
         self.driver.quit()
@@ -157,7 +159,7 @@ class wocabot:
                 
                 #print(f"{self.debug} (leaderboard) {elem2.find_element(By.CLASS_NAME,'name').text}{online}")
             except Exception as e:
-                print(e)
+                pass # StaleElementException, but doesn't seem to hurt
         return leaderboard
     
     #packages
@@ -343,15 +345,15 @@ class wocabot:
             for x in preklady:
                 if len(miss) == len(x):
                     preklad = x
-
-        letters = self.get_elements(By.CLASS_NAME,"char")
-        missing_letters = self.find_missing_letters(miss,preklad)
-        print(missing_letters,[letter.text for letter in letters])
-        for x in missing_letters:
-            for letter in letters:
-                if letter.text == x:
-                    letter.click()
-        self.wait_for_element(2,By.ID,"completeWordSubmitBtn").click()
+        while self.exists_element(self.driver,By.ID,"completeWord"):
+            letters = self.get_elements(By.CLASS_NAME,"char")
+            missing_letters = self.find_missing_letters(miss,preklad)
+            print(missing_letters,[letter.text for letter in letters])
+            for x in missing_letters:
+                for letter in letters:
+                    if letter.text == x:
+                        letter.click()
+            self.wait_for_element(2,By.ID,"completeWordSubmitBtn").click()
     def _pariky(self):
         questions = self.get_elements(By.CLASS_NAME,"fp_q") # btn-success
         questiontexts = [x.text for x in questions]
@@ -382,26 +384,34 @@ class wocabot:
         # pq_words
         # pexesoCardWrapper
         # pexesoBack
-        answertexts = []
-        questiontexts = []
-        pa_words = self.get_element(By.ID,"pa_words")
-        pq_words = self.get_element(By.ID,"pq_words")
+        while self.exists_element(self.driver,By.ID,"pa_words"):
+            answertexts = []
+            questiontexts = []
+            pa_words = self.get_element(By.ID,"pa_words")
+            pq_words = self.get_element(By.ID,"pq_words")
 
-        answers = pa_words.find_elements(By.ID,"pexesoCardWrapper")
-        questions = pq_words.find_elements(By.ID,"pexesoCardWrapper")
+            answers = pa_words.find_elements(By.CLASS_NAME,"pexesoCardWrapper")
+            questions = pq_words.find_elements(By.CLASS_NAME,"pexesoCardWrapper")
 
-        for x in answers:
-            x.click()
-            answertexts.append(x.find_elements(By.ID,"pexesoBack").text)
-        
-        for x in questions:
-            x.click()
-            questiontexts.append(x.find_elements(By.ID,"pexesoBack").text)
-
-
-
-        print(answertexts,questiontexts,answers,questions)
-        ...
+            for x in answers:
+                x.click()
+                for y in x.find_elements(By.CLASS_NAME,"pexesoBack"):
+                    answertexts.append(y.text)
+            
+            for x in questions:
+                x.click()
+                for y in x.find_elements(By.CLASS_NAME,"pexesoBack"):
+                    questiontexts.append(y.text)
+            for x in answertexts:
+                for y in self.dictionary_get(x):
+                    if y in questiontexts:
+                        elem = questions[questiontexts.index(y)]
+                        elem.click()
+                        elem.click()
+                        elem2 = answers[answertexts.index(x)]
+                        elem2.click()
+                        elem2.click()
+                        print(y,x)  
     def _complete_veta(self):
         # addMissingWord
         # a_sentence
@@ -411,14 +421,18 @@ class wocabot:
         # missingWordAnswer = dict[q_sentence] - a_sentence
         a_sentence = self.get_element_text(By.ID,"a_sentence")
         q_sentence = self.get_element_text(By.ID,"q_sentence")
-
-        a_sentence2 = a_sentence.split("_")[0].strip()
-        sentence = self.dictionary_get(q_sentence)
-        for x in sentence:
-            print(x,sentence,len(x),len(a_sentence),a_sentence,a_sentence2)
-            if len(x) == len(a_sentence):
-                x.replace(a_sentence2,"").strip()
-                print(x)
+        try:
+            a_sentence2 = a_sentence.split("_")[0].strip()
+            index = a_sentence.index("_")
+            last = len(a_sentence) - a_sentence[::-1].index("_")
+            sentence = self.dictionary_get(q_sentence)
+            for x in sentence:
+                if len(x) == len(a_sentence):
+                    print(x[index:last],index,last)
+                    self.elem_type(By.ID,"missingWordAnswer",x[index:last])
+                    self.get_element(By.ID,"addMissingWordSubmitBtn").click()
+        except Exception as e:
+            pass
         ...
     def do_package(self):
         print(f"{self.ok} Doing Package...")
@@ -445,6 +459,34 @@ class wocabot:
                 self.get_element(By.ID, "incorrect-next-button").click()
         else:
             print(f"{self.get_element_text(By.ID,'backBtn')} != 'Späť'")
+
+    def track(self):
+        with open(self.tracker_path,"r",encoding="utf-8") as f:
+            tracker = json.load(f)
+        no = datetime.datetime.now()
+        while True:
+            leaderboard = self.get_leaderboard()
+            os.system("clear")
+            
+            now = f"{no.day}.{no.month}.{no.year} {no.hour}:{no.minute}"
+            names = []
+            for x in leaderboard:
+                
+                name = x["name"]
+                online = x["online"]
+                if online:
+                    names.append(name)
+                    if "Jakub Huttman" in names:
+                        names.remove("Jakub Huttman")
+                tracker.update({now:names})
+            print(f"{self.debug} (tracker) {now}: {names}")
+            if datetime.datetime.now().minute == no.minute + 10:
+                no = datetime.datetime.now()
+                print(f"{self.debug} (tracker) dumping...")
+                with open(self.tracker_path,"w",encoding="utf-8") as f:
+                    json.dump(tracker,f,indent=2)
+            
+
 
     def dictionary_get(self,word,*args,**kwargs):
         word = str(word)
@@ -526,6 +568,7 @@ class wocabot:
     def _dictionary_Save(self):
         with open(self.dictionary_path,"w") as f:
             json.dump(self.word_dictionary,f,indent=2)
+    
 
 parser = argparse.ArgumentParser(
                     prog='WocaBot',
@@ -545,6 +588,7 @@ parser.add_argument("--learn",action="store_true",dest="learn",required=False)
 parser.add_argument("--get-classes","--classes",action="store_true",dest="getclasses",required=False)
 parser.add_argument("--get-packages","--packages",action="store_true",dest="getpackages",required=False)
 parser.add_argument("--get-leaderboard","--leaderboard",action="store_true",dest="leaderboard")
+parser.add_argument("--track",action="store_true",dest="tracker")
 args = parser.parse_args()
 
 Wocabot = wocabot(username=args.username,password=args.password,args=args)
