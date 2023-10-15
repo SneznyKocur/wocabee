@@ -163,5 +163,4 @@ cython_debug/
 geckodriver.log
 
 *.json
-./discord/
-./discord/main.py
+

@@ -3,24 +3,15 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import StaleElementReferenceException
-import time, json, os, datetime
-from tqdm import tqdm
-import argparse
+import time, json, os, datetime,threading
 
-#TODO: GUI
-
-
-class wocabot:
-    def __init__(self,username,password,args):
-        self.args = args
-        self.username = username
-        self.password = password
-
-        self.word_dictionary = {}
-        self.tracker_path = "../wocabee archive/track.json"
-        self.dictionary_path = "../wocabee archive/8.A.json"
+import discord
+class wocabee:
+    def __init__(self):
         self.url = "https://wocabee.app/app"
-
+        self.dict_path = "./dict.json"
+        self.data_path = "./data.json"
+        self.word_dictionary = {}
         self.ok = "[+]"
         self.warn = "[!]"
         self.err = "[-]"
@@ -32,73 +23,25 @@ class wocabot:
         self.LEARN = 2
         self.LEARNALL = 3
         self.GETPACKAGE = 4
-
+    def init(self,username,password):
         self.word_dictionary = self._dictionary_Load()
         self.driver = webdriver.Firefox()
         self.driver.get(self.url)
         self.class_names = []
         print(f"{self.ok} Logging in...")
-        self.login(self.username,self.password)
+        self.login(username,password)
         if not self.is_loggedIn():
-            print(f"{self.err} Failed to log in")
-            self.driver.quit()
-            return
+            self.login(username,password)
+            if not self.is_loggedIn():
+                print("no login :sob:")
+                self.driver.quit()
         self.name = self.get_elements_text(By.TAG_NAME,"b")[0]
         for id,Class in enumerate(self.get_classes()):
             self.class_names.append(Class[id].find_element(By.TAG_NAME,"span").text)
-        print(self.class_names,len(self.class_names))
-        if self.args.getclasses:
-            classes = self.get_classes()
-            for id,Class in enumerate(classes):
-                # class is dict of id:button
-                
-                print(id, Class[id].find_element(By.TAG_NAME,"span").text)
+        print(f"finished init {self.class_names}")
 
-            return
-        elif not self.args.classid and not self.args.auto:
-            print(f"{self.err} Class is required to proceed!")
-            return
-        if not self.args.auto:
-            self.wocaclass = self.args.classid
-            self.pick_class(self.wocaclass,self.get_classes())
-        else:
-            self.auto()
-        self.package = self.args.package
-
-        if self.args.practice:
-            self.package = 0
-            self.pick_package(self.package,self.get_packages(self.PRACTICE))
-            self.practice(self.args.target_points)
-        elif self.args.tracker:
-            self.track()
-        elif self.args.do_package:
-            packages = self.get_packages(self.DOPACKAGE)
-            self.package = self.pick_package(int(self.args.package),packages)
-            self.do_package()
-        elif self.args.learn:
-            packages = self.get_packages(self.LEARN)
-            self.pick_package(self.args.package,packages)
-            self.learn()
-        elif self.args.learnall:
-            self.learnALL()
-        elif self.args.quickclick:
-            self.get_element(By.CLASS_NAME,"btn-info").click()
-            self.get_element(By.ID,"oneAnswerGameStartBtn").click()
-            self.quickclick(self.args.target_points)
-
-        elif self.args.getpackages:
-            for i,x in enumerate(self.get_packages(self.GETPACKAGE)):
-                k,v = x
-                print(f"Package: {i} = {k} Playable: {v}")
-        elif self.args.leaderboard:
-            leaderboard = self.get_leaderboard()
-            first_place = leaderboard[0]
-            for x in leaderboard:
-                print(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴'}) {x['points']:<3} (diff to #1 = {int(first_place['points'])-int(x['points']):>4}) {x['packages']}")
-        else:
-            print(f"{self.err} Nothing to do")
+    def quit(self):
         self.driver.quit()
-
     def elem_type(self,by,elem,x):
         #print("typing:",elem,x)
         elem = self.get_element(by,elem)
@@ -109,10 +52,14 @@ class wocabot:
     def login(self,username,password):
         self.elem_type(By.ID,"login",username)
         self.elem_type(By.ID,"password",password)
+        time.sleep(0.5)
         btn = self.get_element(By.ID,"submitBtn")
         btn.click()
     def is_loggedIn(self):
-        return self.wait_for_element(2,By.ID,"logoutBtn")
+        try:
+            return self.wait_for_element(2,By.ID,"logoutBtn")
+        except:
+            return False    
     # utilities
     def exists_element(self,root,by,element):
         try:
@@ -192,7 +139,6 @@ class wocabot:
                 print(e)
             leaderboard.append({"place":place,"name":name,"points":points,"online":online,"packages":packages})
         return leaderboard
-    
     #packages
     def get_packages(self,prac):
         prac = int(prac)
@@ -227,8 +173,7 @@ class wocabot:
         packages[package_id][package_id].click()
         self.package = package_id
 
-
-    def practice(self,target_wocapoints = None):
+    def get_points(self,target_wocapoints = None):
         save = True
 
         wocapoints = int(self.get_element_text(By.ID,"WocaPoints"))
@@ -262,7 +207,6 @@ class wocabot:
 
         if save:
             self.get_element(By.ID,"backBtn").click()
-
     # learning
     def learn(self,echo = False):
         while self.exists_element(self.driver,By.ID,"intro"):
@@ -282,7 +226,7 @@ class wocabot:
                 self.get_element(By.ID,"backBtn").click()
     def learnALL(self):
         packagelist = self.get_packages(self.LEARNALL)
-        for i in tqdm(range(len(packagelist)),colour="red"):
+        for i in range(len(packagelist)):
             packagelist = self.get_packages(self.LEARNALL)
             self.wait_for_element(10,By.CLASS_NAME,"pTableRow")
             
@@ -290,23 +234,6 @@ class wocabot:
             self.package = package_id
             self.pick_package(package_id,packagelist)
             self.learn()
-
-    # quickclick
-    def quickclick(self,target_points = None):
-        if not target_points:
-            target_points = int(input("points:"))
-        elif not "+" in target_points:
-            target_points = int(target_points)
-        else:
-            print(f"{self.err} Cant use {target_points} in quickclick")
-            return
-        while self.exists_element(self.driver,By.ID,"oneAnswerGameSecondsLeft"):
-            curr_points = int(self.get_element_text(By.ID,"oneAnswerGameCounter"))
-            if curr_points <= target_points:
-                self._outofmany()
-            else:
-                timeleft = self.get_element_text(By.ID, "oneAnswerGameSecondsLeft")
-                time.sleep(int(timeleft))
 
     def find_missing_letters(self,missing,word):
         if not missing or not word:
@@ -561,42 +488,26 @@ class wocabot:
                 self.get_element(By.ID, "incorrect-next-button").click()
         else:
             print(f"{self.get_element_text(By.ID,'backBtn')} != 'Späť'")
-    
-    def track(self):
-        with open(self.tracker_path,"r",encoding="utf-8") as f:
-            tracker = json.load(f)
-        no = datetime.datetime.now()
-        while True:
-            leaderboard = self.get_leaderboard()
-            os.system("clear")
-            
-            now = f"{no.day}.{no.month}.{no.year} {no.hour}:{no.minute}"
-            names = []
-            for x in leaderboard:
-                
-                name = x["name"]
-                online = x["online"]
-                if online:
-                    names.append(name)
-                    if "Jakub Huttman" in names:
-                        names.remove("Jakub Huttman")
-                tracker.update({now:names})
-            print(f"{self.debug} (tracker) {now}: {names}")
-            if datetime.datetime.now().minute == no.minute + 10:
-                no = datetime.datetime.now()
-                print(f"{self.debug} (tracker) dumping...")
-                with open(self.tracker_path,"w",encoding="utf-8") as f:
-                    json.dump(tracker,f,indent=2)
+            try:
+                self.get_element(By.ID,"backBtn").click()
+            except:
+                pass
 
+    def get_package_completion(self,x):
+        wrapper = self.get_elements(By.CLASS_NAME,"circles-wrapper")
+        for _ in wrapper:
+            elems = _.find_elements(By.CLASS_NAME,"custom-icon")
+            print(x,_,len(elems))
+        return 3
 
     def leave_class(self):
         self.get_element(By.CLASS_NAME,"home-breadcrumb").click()
         time.sleep(0.5) # wait for webpage to load
-    def auto(self):
+    def auto(self,offset):
         now = datetime.datetime.now()
-        offset = 0
+        _offset = 0
         while True:
-            if datetime.datetime.now().hour == now.hour+offset:
+            if datetime.datetime.now().hour == now.hour+_offset:
                 now = datetime.datetime.now()
                 if not self.args.classid:
                     # check classes
@@ -663,8 +574,7 @@ class wocabot:
                                 self.pick_package(self.package,self.get_packages(self.PRACTICE))
                                 self.practice(target_points)
                         time.sleep(2) # wait for leaderboard to update
-                offset = 3
-
+            _offset = offset
     def dictionary_get(self,word,*args,**kwargs):
         word = str(word)
         if not self.word_dictionary:
@@ -750,36 +660,280 @@ class wocabot:
         self._dictionary_Save()
 
     def _dictionary_Load(self):
-        with open(self.dictionary_path,"r") as f:
+        with open(self.dict_path,"r") as f:
             ext_dict = json.load(f)
         self.word_dictionary = ext_dict
         return ext_dict
     def _dictionary_Save(self):
-        with open(self.dictionary_path,"w") as f:
+        with open(self.dict_path,"w") as f:
             json.dump(self.word_dictionary,f,indent=2)
+woca = wocabee()
+def get_classes_from_dict():
     
+    with open(woca.dict_path,"r") as f:
+        dictionary = json.loads(f.read())
+    return dictionary.keys()
 
-parser = argparse.ArgumentParser(
-                    prog='WocaBot',
-                    description='Multi-purpose bot for wocabee',
-                    epilog='I am not responsible for your teachers getting angry :)')
 
-parser.add_argument("-u","--user","--username",dest="username",required=False) # debug
-parser.add_argument("-p","--pass","--password",dest="password",required=False) # debug
-parser.add_argument("--practice",action='store_true',dest="practice",required=False)
-parser.add_argument("--quickclick",action='store_true',dest="quickclick",required=False)
-parser.add_argument("--points",dest="target_points",required=False)
-parser.add_argument("--class",dest="classid",required=False)
-parser.add_argument("--package",dest="package",required=False)
-parser.add_argument("--do-package",action='store_true',dest="do_package",required=False)
-parser.add_argument("--learn-all",action="store_true",dest="learnall",required=False)
-parser.add_argument("--learn",action="store_true",dest="learn",required=False)
-parser.add_argument("--get-classes","--classes",action="store_true",dest="getclasses",required=False)
-parser.add_argument("--get-packages","--packages",action="store_true",dest="getpackages",required=False)
-parser.add_argument("--get-leaderboard","--leaderboard",action="store_true",dest="leaderboard")
-parser.add_argument("--track",action="store_true",dest="tracker",required=False)
-parser.add_argument("--auto",action="store_true",dest="auto",required=False)
-parser.add_argument("--leaderboard-pos",dest="leaderboardpos",required=False)
-args = parser.parse_args()
+bot = discord.Bot()
 
-Wocabot = wocabot(username=args.username,password=args.password,args=args)
+async def class_autocomplete(ctx: discord.AutocompleteContext):
+    trieda = ctx.options['trieda']
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+    end = [x[0] for x in data[trieda] if x]
+    print(end)
+    return end
+
+class MyView(discord.ui.View):
+    @discord.ui.select( # the decorator that lets you specify the properties of the select menu
+        placeholder = "Výber balíku", # the placeholder text that will be displayed if nothing is selected
+        min_values = 1, # the minimum number of values that must be selected by the users
+        max_values = 1, # the maximum number of values that can be selected by the users
+        options = [ # the list of options from which users can choose, a required field
+        ],
+        custom_id="package_select"
+    )
+    async def select_callback(self, select, interaction): # the function called when the user is done selecting options
+        await interaction.response.send_message(f"robkam")
+        print(select.values)
+        for x in select.values:
+            x = int(x)
+            y = x
+            if x != 0 and len(woca.get_packages(woca.DOPACKAGE)) < x:
+                x -=1
+            for _ in range(woca.get_package_completion(y)):
+                print(_)
+                woca.pick_package(x,woca.get_packages(woca.DOPACKAGE))
+                woca.do_package() # why does this quit??
+        woca.quit()
+
+class LearnView(discord.ui.View):
+    @discord.ui.select( # the decorator that lets you specify the properties of the select menu
+        placeholder = "Výber balíku", # the placeholder text that will be displayed if nothing is selected
+        min_values = 1, # the minimum number of values that must be selected by the users
+        max_values = 5, # the maximum number of values that can be selected by the users
+        options = [ # the list of options from which users can choose, a required field
+        ],
+        custom_id="learn_select"
+    )
+    async def select_callback(self, select, interaction): # the function called when the user is done selecting options
+        await interaction.response.defer()
+        original = await interaction.original_response()
+        for x in select.values:
+            woca.pick_package(x,woca.get_packages(woca.LEARN)) #FIXME change to DOPACKAGE
+            woca.learn()
+        woca.quit()
+
+        
+        await original.channel.send_message("hotovo")
+
+@bot.event
+async def on_ready():
+    print(f"We have logged in as {bot.user}")
+
+@bot.slash_command()
+async def hello(ctx):
+    await ctx.respond("Hello!")
+
+
+@bot.slash_command()
+async def leaderboard(ctx,classroom: discord.Option(str,choices=get_classes_from_dict())):
+    await ctx.defer()
+    end = ""
+    with open(woca.data_path,"r") as f:
+        
+        data = json.load(f)
+    meno = data[classroom][0][0]
+    heslo = data[classroom][0][1]
+    woca.init(meno,heslo)
+    index = woca.class_names.index(classroom)
+    woca.pick_class(index,woca.get_classes())
+    leaderboard = woca.get_leaderboard()
+    first_place = leaderboard[0]
+    for x in leaderboard:
+        end+=(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴':>5}) {x['points']:<3} (diff to #1 = {int(first_place['points'])-int(x['points']):>4}) {x['packages']}\n")
+    await ctx.respond(end)
+    woca.quit()
+@bot.slash_command()
+async def zasielka(ctx,meno:str,trieda: discord.Option(str,choices=get_classes_from_dict()),wocabee_prihlasovacie: str,wocabee_heslo: str,baliky: int,body: int,cena: float):
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+    if not trieda in data:
+        data.update({trieda:[]})
+    data[trieda].append([wocabee_prihlasovacie,wocabee_heslo])
+    with open(woca.data_path,"w") as f:
+        json.dump(data,f)
+
+    embed = discord.Embed(
+        title="Nová zásielka",
+        description="jeees keš many peniaze",
+        color=discord.Colour.blurple(), # Pycord provides a class with default colors you can choose from
+    )
+    embed.add_field(name="Meno:", value=meno)
+
+    embed.add_field(name="Trieda:", value=trieda)
+    embed.add_field(name="Woca meno", value=wocabee_prihlasovacie)
+    embed.add_field(name="Woca heslo", value=wocabee_heslo)
+    embed.add_field(name="baliky:",value=baliky)
+    embed.add_field(name="body:",value=body)
+    embed.add_field(name="zarobok:",value=str(cena) + "€")
+    embed.set_footer(text="omg áno") # footers can have icons too
+    
+    with open("zasielky.txt","a") as f:
+        f.write(f"{meno}: [{wocabee_prihlasovacie} {wocabee_heslo}] {baliky}b {body}bodov za {cena}€")
+
+    channel = bot.get_channel(1160961783016734740)
+    await channel.send(embed=embed)
+    response = await ctx.respond("zaregistrovane")
+    await response.delete_original_response()
+
+@bot.slash_command()
+async def miesto(ctx,trieda: discord.Option(str,choices=get_classes_from_dict()),
+                 komu: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(class_autocomplete)),miesto:int):
+    await ctx.defer()
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+        for x in data[trieda]:
+            if x[0] == komu:
+                udaje = x
+
+
+        meno = udaje[0]
+        heslo = udaje[1]
+        woca.init(meno,heslo)
+    woca.pick_class(woca.class_names.index(trieda),woca.get_classes())
+    
+    leaderboard = woca.get_leaderboard()
+    nplace = leaderboard[miesto-1]
+    ourpoints = [x["points"] for x in leaderboard if x["name"] == woca.name][0]
+    if nplace["name"] != meno:
+        if int(nplace["points"]) > int(ourpoints):
+            target_points = int(nplace["points"]) - int(ourpoints)
+            woca.pick_package(0,woca.get_packages(woca.PRACTICE))
+            await ctx.respond(f"{komu} bude mať {nplace['points']} v {trieda} (#{miesto})")
+            woca.get_points(f"+{target_points}")
+            
+@bot.slash_command()
+async def bodiky(ctx,trieda: discord.Option(str,choices=get_classes_from_dict()),
+                 komu: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(class_autocomplete)),
+                 body: int):
+    await ctx.defer()
+
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+        for x in data[trieda]:
+            if x[0] == komu:
+                udaje = x
+
+
+        meno = udaje[0]
+        heslo = udaje[1]
+        print(udaje,meno,heslo,komu)
+        woca.init(meno,heslo)
+    woca.pick_class(woca.class_names.index(trieda),woca.get_classes())
+    woca.pick_package(0,woca.get_packages(woca.PRACTICE))
+    await ctx.respond(f"robim {body} wocapoints pre {komu} v {trieda}")
+    woca.get_points(f"+{body}")
+    woca.quit()
+
+@bot.slash_command()
+async def nove_baliky(ctx):
+    await ctx.defer()
+    trieda = get_classes_from_dict()
+    embed = discord.Embed(
+        title="baliky",
+        description="omg ano",
+        color=discord.Colour.blurple(), # Pycord provides a class with default colors you can choose from
+    )
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+    for y in [_ for _ in trieda if _ != "Picture"]: 
+        for x in data[y]:
+            udaje = x
+            meno = udaje[0]
+            heslo = udaje[1]
+            print(meno,heslo)
+            woca.init(meno,heslo)
+            woca.pick_class(woca.class_names.index(y),woca.get_classes())
+            packages = woca.get_packages(woca.GETPACKAGE)
+            a = False
+            for package in packages:
+                items = package.items()
+                for name,playable in items:         
+                    if playable:
+                        embed.add_field(name=meno,value=f"{name} {y}")
+                        a = True
+            woca.quit()
+    if not a:
+        await ctx.respond("žiadne nedokončene baliky :sob:")
+    else:
+        await ctx.respond(embed=embed)
+
+@bot.slash_command()
+async def zrob_balik(ctx,trieda: discord.Option(str,choices=get_classes_from_dict()),
+                 komu: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(class_autocomplete))
+                 ):
+    await ctx.defer()
+    view = MyView()
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+        for x in data[trieda]:
+            if x[0] == komu:
+                udaje = x
+
+
+        meno = udaje[0]
+        heslo = udaje[1]
+    woca.init(meno,heslo)
+    woca.pick_class(woca.class_names.index(trieda),woca.get_classes())
+    doablePackages = woca.get_packages(woca.DOPACKAGE)
+    packages = woca.get_packages(woca.GETPACKAGE)
+    if doablePackages:
+        playablePackages = list()
+        for package in packages:
+            for name,playable in package.items():
+                if playable:
+                    playablePackages.append(name)
+        for package in doablePackages:
+            items = package.items()
+            for id,button in items:         
+                view.get_item("package_select").add_option(label=playablePackages[id],value=str(id),default=False)
+        view.get_item("package_select").max_values = len(woca.get_packages(woca.DOPACKAGE))
+        await ctx.respond(view=view)
+    else:
+        await ctx.respond("neni su baliky :sob:")
+
+@bot.slash_command()
+async def nauc_balik(ctx,trieda: discord.Option(str,choices=get_classes_from_dict()),
+                        komu: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(class_autocomplete))):
+    await ctx.defer()
+    view = LearnView()
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+        for x in data[trieda]:
+            if x[0] == komu:
+                udaje = x
+
+
+        meno = udaje[0]
+        heslo = udaje[1]
+    woca.init(meno,heslo)
+    woca.pick_class(woca.class_names.index(trieda),woca.get_classes())
+    doablePackages = woca.get_packages(woca.LEARN)
+    packages = woca.get_packages(woca.GETPACKAGE)
+    if doablePackages:
+        playablePackages = list()
+        for package in packages:
+            for name,playable in package.items():    
+                playablePackages.append(name)
+        for package in doablePackages:
+            items = package.items()
+            for id,button in items:         
+                view.get_item("learn_select").add_option(label=playablePackages[id],value=str(id),default=False)
+        
+        await ctx.followup.send(view=view)
+    else:
+        await ctx.followup.send("neni su baliky :sob:")
+                        
+bot.run(token)
