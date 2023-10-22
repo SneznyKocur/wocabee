@@ -163,4 +163,4 @@ cython_debug/
 geckodriver.log
 
 *.json
-
+*.txt

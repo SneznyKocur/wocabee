@@ -28,7 +28,7 @@ class wocabee:
         self.driver = webdriver.Firefox()
         self.driver.get(self.url)
         self.class_names = []
-        print(f"{self.ok} Logging in...")
+        print(f"{self.ok} Logging in... {username} {password}")
         self.login(username,password)
         if not self.is_loggedIn():
             self.login(username,password)
@@ -488,11 +488,12 @@ class wocabee:
                 self.get_element(By.ID, "incorrect-next-button").click()
         else:
             print(f"{self.get_element_text(By.ID,'backBtn')} != 'Späť'")
+            while self.exists_element(self.driver,By.ID,"continueBtn"):
+                self.get_element(By.ID,"continueBtn").click()
             try:
                 self.get_element(By.ID,"backBtn").click()
             except:
                 pass
-
     def get_package_completion(self,x):
         wrapper = self.get_elements(By.CLASS_NAME,"circles-wrapper")
         for _ in wrapper:
@@ -674,6 +675,7 @@ def get_classes_from_dict():
         dictionary = json.loads(f.read())
     return dictionary.keys()
 
+token = "MTE2MjA3OTU2MTU4OTIxNTMwMg.Gdll91.QgdUobizDIVxko_UA-zt9VITRuH6SYyJPSggCA"
 
 bot = discord.Bot()
 
@@ -698,6 +700,8 @@ class MyView(discord.ui.View):
         await interaction.response.send_message(f"robkam")
         print(select.values)
         for x in select.values:
+            if woca.exists_element(woca.driver,By.ID,"backBtn"):
+                woca.get_element(By.ID,"backBtn").click()
             x = int(x)
             y = x
             if x != 0 and len(woca.get_packages(woca.DOPACKAGE)) < x:
@@ -756,7 +760,7 @@ async def leaderboard(ctx,classroom: discord.Option(str,choices=get_classes_from
     await ctx.respond(end)
     woca.quit()
 @bot.slash_command()
-async def zasielka(ctx,meno:str,trieda: discord.Option(str,choices=get_classes_from_dict()),wocabee_prihlasovacie: str,wocabee_heslo: str,baliky: int,body: int,cena: float):
+async def zasielka(ctx,meno:str,trieda: discord.Option(str,choices=get_classes_from_dict()),wocabee_prihlasovacie: str,wocabee_heslo: str,baliky: int,body: int,cena: str):
     with open(woca.data_path,"r") as f:
         data = json.load(f)
     if not trieda in data:
