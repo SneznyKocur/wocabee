@@ -677,7 +677,7 @@ def get_classes_from_dict():
         dictionary = json.loads(f.read())
     return dictionary.keys()
 
-token = "MTE2MjA3OTU2MTU4OTIxNTMwMg.GT_S9T.Lt4tda-AgPAsGxrH2QoSn_WWMaD_fQcCL6QwCc"
+token = ""
 
 bot = discord.Bot()
 
