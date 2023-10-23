@@ -3,13 +3,30 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from webdriver_manager.firefox import GeckoDriverManager
 import time, json, os, datetime
 from tqdm import tqdm
 import argparse
 
 #TODO: GUI
 
+"""
+    track.json structure:
+    { 
+        time (d.m.y HH:MM): [
+            names (str)
+        ]
+    }
 
+    dict.json structure:
+    {
+    class1: [{word:translation}, {word2:translation2}, ...]
+    class2...
+    Pictures: [{picture path: meaning}]
+    }
+
+"""
 class wocabot:
     def __init__(self,username,password,args):
         self.args = args
@@ -17,8 +34,14 @@ class wocabot:
         self.password = password
 
         self.word_dictionary = {}
-        self.tracker_path = "../wocabee archive/track.json"
-        self.dictionary_path = "../wocabee archive/8.A.json"
+        self.tracker_path = os.path.exists("../wocabee arcive/track.json") or input("track file:")
+        self.dictionary_path = os.path.exists("../wocabee archive/8.A.json") or input("dict file:")
+        # create files if not exists
+        if not os.path.exists(self.tracker_path):
+            open(self.tracker_path,"w").close()
+        if not os.path.exists(self.dictionary_path):
+            open(self.dictionary_path,"w").close()
+
         self.url = "https://wocabee.app/app"
 
         self.ok = "[+]"
@@ -100,7 +123,6 @@ class wocabot:
         self.driver.quit()
 
     def elem_type(self,by,elem,x):
-        #print("typing:",elem,x)
         elem = self.get_element(by,elem)
         
         elem.clear()
@@ -320,15 +342,14 @@ class wocabot:
         return end
 
     # exercises
-    # USPORIADANIE SLOV:
-    # no one si zisti preklad
+    # TODO USPORIADANIE SLOV:
+    # si zisti preklad
     # splitne po medzerach
     # zisti kde čo patry
     # zisti o kolko to ma posunut a kam
     # posunie
     # krok 3 znova
-    # word-to-arrange
-    # ende
+    # (word-to-arrange)
     def do_exercise(self):
         if self.exists_element(self.driver,By.ID,"addMissingWord"):
             self._complete_veta()
@@ -568,8 +589,10 @@ class wocabot:
         no = datetime.datetime.now()
         while True:
             leaderboard = self.get_leaderboard()
-            os.system("clear")
-            
+            if os.name == "posix":
+                os.system("clear")
+            else:
+                os.system("cls")
             now = f"{no.day}.{no.month}.{no.year} {no.hour}:{no.minute}"
             names = []
             for x in leaderboard:
@@ -578,8 +601,8 @@ class wocabot:
                 online = x["online"]
                 if online:
                     names.append(name)
-                    if "Jakub Huttman" in names:
-                        names.remove("Jakub Huttman")
+                    if self.name in names:
+                        names.remove(self.name)
                 tracker.update({now:names})
             print(f"{self.debug} (tracker) {now}: {names}")
             if datetime.datetime.now().minute == no.minute + 10:
@@ -685,18 +708,15 @@ class wocabot:
             for x in dictionary:
                 if word == x:
                     for x in dictionary[x]:
-                        print("BBBBBBB",x,word)
                         if not x in end:
                             end.append(x)
                 elif word in dictionary[x]:
-                    print("AAAAAAA",x,word,dictionary[x])
                     if not x in end:
                         end.append(x)
         
         if end:
             if isinstance(end[0],list):
                 return end[0]
-        #print(f"{self.debug} {word} is {end} maybe please")
         print(f"{self.debug} (GET) {word} is {end}")
         return end
 

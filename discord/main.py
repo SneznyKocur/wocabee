@@ -3,6 +3,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from webdriver_manager.firefox import GeckoDriverManager
 import time, json, os, datetime,threading
 
 import discord
@@ -25,7 +27,7 @@ class wocabee:
         self.GETPACKAGE = 4
     def init(self,username,password):
         self.word_dictionary = self._dictionary_Load()
-        self.driver = webdriver.Firefox()
+        self.driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()))
         self.driver.get(self.url)
         self.class_names = []
         print(f"{self.ok} Logging in... {username} {password}")
@@ -675,7 +677,7 @@ def get_classes_from_dict():
         dictionary = json.loads(f.read())
     return dictionary.keys()
 
-token = "MTE2MjA3OTU2MTU4OTIxNTMwMg.Gdll91.QgdUobizDIVxko_UA-zt9VITRuH6SYyJPSggCA"
+token = "MTE2MjA3OTU2MTU4OTIxNTMwMg.GT_S9T.Lt4tda-AgPAsGxrH2QoSn_WWMaD_fQcCL6QwCc"
 
 bot = discord.Bot()
 
@@ -700,8 +702,7 @@ class MyView(discord.ui.View):
         await interaction.response.send_message(f"robkam")
         print(select.values)
         for x in select.values:
-            if woca.exists_element(woca.driver,By.ID,"backBtn"):
-                woca.get_element(By.ID,"backBtn").click()
+            
             x = int(x)
             y = x
             if x != 0 and len(woca.get_packages(woca.DOPACKAGE)) < x:
@@ -710,6 +711,13 @@ class MyView(discord.ui.View):
                 print(_)
                 woca.pick_package(x,woca.get_packages(woca.DOPACKAGE))
                 woca.do_package() # why does this quit??
+                time.sleep(2)
+                if woca.exists_element(woca.driver,By.ID,"continueBtn"):
+                    woca.get_element(By.ID,"continueBtn").click()
+                if woca.exists_element(woca.driver,By.ID,"backBtn"):
+                    print("yes")
+                    if woca.get_element_text(By.ID,"backBtn") == "Uložiť a odísť":
+                        woca.get_element(By.ID,"backBtn").click()
         woca.quit()
 
 class LearnView(discord.ui.View):
@@ -874,6 +882,32 @@ async def nove_baliky(ctx):
     else:
         await ctx.respond(embed=embed)
 
+@bot.slash_command()
+async def chybajuce_baliky(ctx,trieda: discord.Option(str,choices=get_classes_from_dict()),
+                 komu: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(class_autocomplete))):
+    await ctx.defer()
+    with open(woca.data_path,"r") as f:
+        data = json.load(f)
+        for x in data[trieda]:
+            if x[0] == komu:
+                udaje = x
+
+
+        meno = udaje[0]
+        heslo = udaje[1]
+    woca.init(meno,heslo)
+    woca.pick_class(woca.class_names.index(trieda),woca.get_classes())
+    packages = woca.get_packages(woca.GETPACKAGE)
+    end = []
+    for package in packages:
+        items = package.items()
+        for name,playable in items:         
+            if playable:
+                end.append(name)
+    woca.quit()
+    await ctx.respond(end)
+                
+    
 @bot.slash_command()
 async def zrob_balik(ctx,trieda: discord.Option(str,choices=get_classes_from_dict()),
                  komu: discord.Option(str, autocomplete=discord.utils.basic_autocomplete(class_autocomplete))
