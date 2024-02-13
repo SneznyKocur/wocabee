@@ -1,3 +1,5 @@
+from tqdm import tqdm
+import argparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -5,9 +7,10 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.firefox import GeckoDriverManager
-import time, json, os, datetime
-from tqdm import tqdm
-import argparse
+import time, json, os, datetime,threading
+from time import sleep
+
+import asyncio
 
 #TODO: GUI
 
@@ -27,23 +30,16 @@ import argparse
     }
 
 """
-class wocabot:
-    def __init__(self,username,password,args):
-        self.args = args
-        self.username = username
-        self.password = password
 
-        self.word_dictionary = {}
-        self.tracker_path = os.path.exists("../wocabee arcive/track.json") or input("track file:")
-        self.dictionary_path = os.path.exists("../wocabee archive/8.A.json") or input("dict file:")
-        # create files if not exists
-        if not os.path.exists(self.tracker_path):
-            open(self.tracker_path,"w").close()
-        if not os.path.exists(self.dictionary_path):
-            open(self.dictionary_path,"w").close()
 
+class wocabee:
+    def __init__(self,udaje: tuple):
         self.url = "https://wocabee.app/app"
-
+        self.dict_path = "./dict.json"
+        if not os.path.exists(self.dict_path):
+            with open(self.dict_path,"w") as f:
+                f.write("{}")
+        self.word_dictionary = {}
         self.ok = "[+]"
         self.warn = "[!]"
         self.err = "[-]"
@@ -55,74 +51,37 @@ class wocabot:
         self.LEARN = 2
         self.LEARNALL = 3
         self.GETPACKAGE = 4
-
-        self.word_dictionary = self._dictionary_Load()
-        self.driver = webdriver.Firefox()
+        self.udaje = udaje
+        self.driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()))
         self.driver.get(self.url)
+    def init(self):
+        self.word_dictionary = self._dictionary_Load()
         self.class_names = []
-        print(f"{self.ok} Logging in...")
-        self.login(self.username,self.password)
+        username,password = self.udaje
+        print(f"{self.ok} Logging in... {username} {password}")
+        # HACK:
+        try:
+            self.login(username,password)
+        except:
+            pass
         if not self.is_loggedIn():
-            print(f"{self.err} Failed to log in")
-            self.driver.quit()
-            return
+            try:
+                self.login(username,password)
+            except:
+                pass
+            if not self.is_loggedIn():
+                print("no login :sob:")
+                self.driver.quit()
         self.name = self.get_elements_text(By.TAG_NAME,"b")[0]
         for id,Class in enumerate(self.get_classes()):
             self.class_names.append(Class[id].find_element(By.TAG_NAME,"span").text)
-        print(self.class_names,len(self.class_names))
-        if self.args.getclasses:
-            classes = self.get_classes()
-            for id,Class in enumerate(classes):
-                # class is dict of id:button
-                
-                print(id, Class[id].find_element(By.TAG_NAME,"span").text)
+        print(f"finished init {self.class_names}")
+        time.sleep(2)
 
-            return
-        elif not self.args.classid and not self.args.auto:
-            print(f"{self.err} Class is required to proceed!")
-            return
-        if not self.args.auto:
-            self.wocaclass = self.args.classid
-            self.pick_class(self.wocaclass,self.get_classes())
-        else:
-            self.auto()
-        self.package = self.args.package
-
-        if self.args.practice:
-            self.package = 0
-            self.pick_package(self.package,self.get_packages(self.PRACTICE))
-            self.practice(self.args.target_points)
-        elif self.args.tracker:
-            self.track()
-        elif self.args.do_package:
-            packages = self.get_packages(self.DOPACKAGE)
-            self.package = self.pick_package(int(self.args.package),packages)
-            self.do_package()
-        elif self.args.learn:
-            packages = self.get_packages(self.LEARN)
-            self.pick_package(self.args.package,packages)
-            self.learn()
-        elif self.args.learnall:
-            self.learnALL()
-        elif self.args.quickclick:
-            self.get_element(By.CLASS_NAME,"btn-info").click()
-            self.get_element(By.ID,"oneAnswerGameStartBtn").click()
-            self.quickclick(self.args.target_points)
-
-        elif self.args.getpackages:
-            for i,x in enumerate(self.get_packages(self.GETPACKAGE)):
-                k,v = x
-                print(f"Package: {i} = {k} Playable: {v}")
-        elif self.args.leaderboard:
-            leaderboard = self.get_leaderboard()
-            first_place = leaderboard[0]
-            for x in leaderboard:
-                print(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴'}) {x['points']:<3} (diff to #1 = {int(first_place['points'])-int(x['points']):>4}) {x['packages']}")
-        else:
-            print(f"{self.err} Nothing to do")
+    def quit(self):
         self.driver.quit()
-
     def elem_type(self,by,elem,x):
+        #print("typing:",elem,x)
         elem = self.get_element(by,elem)
         
         elem.clear()
@@ -131,10 +90,14 @@ class wocabot:
     def login(self,username,password):
         self.elem_type(By.ID,"login",username)
         self.elem_type(By.ID,"password",password)
+        time.sleep(0.5)
         btn = self.get_element(By.ID,"submitBtn")
         btn.click()
     def is_loggedIn(self):
-        return self.wait_for_element(2,By.ID,"logoutBtn")
+        try:
+            return self.wait_for_element(2,By.ID,"logoutBtn")
+        except:
+            return False    
     # utilities
     def exists_element(self,root,by,element):
         try:
@@ -184,6 +147,7 @@ class wocabot:
             self.wocaclass = class_id
         except Exception as e:
             print(class_id,classes,classes[class_id],len(classes),e)
+        time.sleep(2) # loading times
 
     # leaderboard
     def get_leaderboard(self):
@@ -214,7 +178,6 @@ class wocabot:
                 print(e)
             leaderboard.append({"place":place,"name":name,"points":points,"online":online,"packages":packages})
         return leaderboard
-    
     #packages
     def get_packages(self,prac):
         prac = int(prac)
@@ -232,7 +195,7 @@ class wocabot:
                     packageslist.append({i:button})
 
         elif prac == self.DOPACKAGE:
-            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")[:10]):
+            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")):
                 if self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
                     button = elem.find_element(By.CLASS_NAME,"package ").find_element(By.TAG_NAME,"a")
                     id = len(packageslist)
@@ -248,9 +211,9 @@ class wocabot:
         print(packages,package_id)
         packages[package_id][package_id].click()
         self.package = package_id
+        time.sleep(2)
 
-
-    def practice(self,target_wocapoints = None):
+    def get_points(self,target_wocapoints = None):
         save = True
 
         wocapoints = int(self.get_element_text(By.ID,"WocaPoints"))
@@ -284,7 +247,6 @@ class wocabot:
 
         if save:
             self.get_element(By.ID,"backBtn").click()
-
     # learning
     def learn(self,echo = False):
         while self.exists_element(self.driver,By.ID,"intro"):
@@ -294,7 +256,9 @@ class wocabot:
                 # picture
                 picture = self.get_element(By.ID,"pictureThumbnail")
                 path = picture.get_attribute("src")
-                self.dictionary_put(os.path.basename(path)[::3],translation,Picture=True)
+                print(f"{self.debug} PUT {os.path.basename(path)[:-4]} as translation")
+                self.dictionary_put(os.path.basename(path)[:-4],translation,Picture=True)
+            print(f"{self.debug} PUT {word} as {translation}")
             self.dictionary_put(word, translation,self.package)
 
             try: 
@@ -304,7 +268,7 @@ class wocabot:
                 self.get_element(By.ID,"backBtn").click()
     def learnALL(self):
         packagelist = self.get_packages(self.LEARNALL)
-        for i in tqdm(range(len(packagelist)),colour="red"):
+        for i in range(len(packagelist)):
             packagelist = self.get_packages(self.LEARNALL)
             self.wait_for_element(10,By.CLASS_NAME,"pTableRow")
             
@@ -312,23 +276,6 @@ class wocabot:
             self.package = package_id
             self.pick_package(package_id,packagelist)
             self.learn()
-
-    # quickclick
-    def quickclick(self,target_points = None):
-        if not target_points:
-            target_points = int(input("points:"))
-        elif not "+" in target_points:
-            target_points = int(target_points)
-        else:
-            print(f"{self.err} Cant use {target_points} in quickclick")
-            return
-        while self.exists_element(self.driver,By.ID,"oneAnswerGameSecondsLeft"):
-            curr_points = int(self.get_element_text(By.ID,"oneAnswerGameCounter"))
-            if curr_points <= target_points:
-                self._outofmany()
-            else:
-                timeleft = self.get_element_text(By.ID, "oneAnswerGameSecondsLeft")
-                time.sleep(int(timeleft))
 
     def find_missing_letters(self,missing,word):
         if not missing or not word:
@@ -342,37 +289,38 @@ class wocabot:
         return end
 
     # exercises
-    # TODO USPORIADANIE SLOV:
-    # si zisti preklad
+    # USPORIADANIE SLOV:
+    # no one si zisti preklad
     # splitne po medzerach
     # zisti kde čo patry
     # zisti o kolko to ma posunut a kam
     # posunie
     # krok 3 znova
-    # (word-to-arrange)
+    # word-to-arrange
+    # ende
     def do_exercise(self):
         if self.exists_element(self.driver,By.ID,"addMissingWord"):
             self._complete_veta()
-        elif self.exists_element(self.driver,By.ID,"choosePicture"):
+        if self.exists_element(self.driver,By.ID,"choosePicture"):
             # HACK
             try:
                 self._choose_picture()
             except:
                 self._idk()
-        elif self.exists_element(self.driver,By.ID,"pexeso"):
+        if self.exists_element(self.driver,By.ID,"pexeso"):
             self._pexeso()
-        elif self.exists_element(self.driver,By.CLASS_NAME,"picture"):
+        if self.exists_element(self.driver,By.CLASS_NAME,"picture"):
             self._idk()
-        elif self.exists_element(self.driver,By.ID,"describePicture"):
+        if self.exists_element(self.driver,By.ID,"describePicture"):
             # HACK
             try:
                 self._describe()
             except:
                 self._idk()
-        elif self.exists_element(self.driver,By.ID,"transcribeSkipBtn"):
+        if self.exists_element(self.driver,By.ID,"transcribeSkipBtn"):
             print(f"{self.debug} skip")
             self.get_element(By.ID,"transcribeSkipBtn").click()
-        elif self.exists_element(self.driver,By.ID,"translateWord"):
+        if self.exists_element(self.driver,By.ID,"translateWord"):
             print(f"{self.debug} translate word")
             word = self.wait_for_element(5,By.ID,"q_word").text
             try:
@@ -383,26 +331,26 @@ class wocabot:
             if not translated:
                 translated = "omg"
             self._main(translated)
-        elif self.exists_element(self.driver,By.ID,"tfw_word"):
+        if self.exists_element(self.driver,By.ID,"tfw_word"):
             print(f"{self.debug} tfw word")
             word = self.get_element_text(By.ID,"tfw_word")
             translated = self.dictionary_get(word,self.package)[0]
             if not translated:
                 translated = "omg"
             self._tfw(translated)
-        elif self.exists_element(self.driver,By.ID, "chooseWord"):
+        if self.exists_element(self.driver,By.ID, "chooseWord"):
             print(f"{self.debug} choose word")
             self._ch_word()
-        elif self.exists_element(self.driver,By.ID,"completeWord"):
+        if self.exists_element(self.driver,By.ID,"completeWord"):
             print(f"{self.debug} complete wodrd")
             self._complete_word()
-        elif self.exists_element(self.driver,By.ID,"oneOutOfMany"):
+        if self.exists_element(self.driver,By.ID,"oneOutOfMany"):
             print(f"{self.debug} one out of many")
             self._outofmany()
-        elif self.exists_element(self.driver,By.ID,"findPair"):
+        if self.exists_element(self.driver,By.ID,"findPair"):
             print(f"{self.debug} pariky")
             self._pariky()
-        elif self.exists_element(self.driver,By.ID,"incorrect-next-button"):
+        if self.exists_element(self.driver,By.ID,"incorrect-next-button"):
             word = self.get_element_text(By.CLASS_NAME,"correctWordQuestion")
             translation = self.get_element_text(By.CLASS_NAME,"correctWordAnswer")
             self.dictionary_put(word,translation,self.package)
@@ -410,25 +358,35 @@ class wocabot:
     
     def _choose_picture(self):
         while True:
-            word = self.get_element_text(By.ID,"choosePictureWord")
+            time.sleep(0.2)
+            word_translation = self.get_element_text(By.ID,"choosePictureWord")
             picture = self.get_element(By.CLASS_NAME,"slick-current").find_element(By.TAG_NAME,"img")
-            if picture.get_attribute("word"):
-                for x in self.dictionary_get(word):
-                    print(x,picture.get_attribute("word"))
-                    if x == picture.get_attribute("word"):
-                        picture.click()
-                        break
-                    else:
-                        print(x,picture.get_attribute("word"),x == picture.get_attribute("word"))
-            self.get_element(By.CLASS_NAME,"slick-next").click()
+            word = picture.get_attribute("word")
+            if not self.dictionary_get(word):
+                self.get_element(By.CLASS_NAME,"slick-next").click()
+            elif word == word_translation: 
+                print(word,word_translation,"CLICKING")
+                picture.click()
+                picture.click()
+            elif self.dictionary_get(word)[0] == word_translation:
+                print(word,word_translation,"CLICKING")
+                picture.click()
+                picture.click()
+            else:
+                self.get_element(By.CLASS_NAME,"slick-next").click()
+        
     def _describe(self):
+        
         image = self.get_element(By.ID,"describePictureImg")
         path = image.get_attribute("src")
-        filename = os.path.basename(path)[::3]
+        # split by / from right and discard file extension
+        filename = path.split("pictures/")[1][:-4]
         description = self.dictionary_get(filename,Picture=True)
         print(description,filename,path)
         self.elem_type(By.ID,"describePictureAnswer",description)
         self.get_element(By.ID,"describePictureSubmitBtn").click()
+        
+        
     def _idk(self):
         print(f"{self.err} toto neviem ešte")
     def _main(self,translated):
@@ -454,24 +412,12 @@ class wocabot:
             for x in preklady:
                 if len(miss) == len(x):
                     preklad = x
-        print(preklad,word,miss)
-        letters = [x for x in self.get_element(By.ID,"characters").find_elements(By.TAG_NAME,"span") if x.is_displayed()]
-        for _ in self.find_missing_letters(miss,preklad):
-            miss = self.get_element_text(By.ID,"completeWordAnswer")
-            if "_" in miss:
-                index = miss.index("_")
-                
-                print([x.text for x in letters])
-                for x in letters:
-                    if x.text == preklad[index]:
-                        x.click()
-                        letters.remove(x)
-                    else:
-                        print(x.text,preklad[index])
+        for x in self.find_missing_letters(miss,preklad):
+            self.get_element(By.ID,"completeWordAnswer").send_keys(x)
         try:
             self.wait_for_element(5,By.ID,"completeWordSubmitBtn").click()
-        except:
-            pass
+        except Exception as e:
+            print(e)
     def _pariky(self):
         questions = self.get_elements(By.CLASS_NAME,"fp_q") # btn-success
         questiontexts = [x.text for x in questions]
@@ -543,7 +489,6 @@ class wocabot:
         a_sentence = self.get_element_text(By.ID,"a_sentence")
         q_sentence = self.get_element_text(By.ID,"q_sentence")
         try:
-            a_sentence2 = a_sentence.split("_")[0].strip()
             index = a_sentence.index("_")
             last = len(a_sentence) - a_sentence[::-1].index("_")
             sentence = self.dictionary_get(q_sentence)
@@ -567,8 +512,18 @@ class wocabot:
                     translation = self.get_element(By.ID,"introTranslation")
                     if word and translation:
                         self.dictionary_put(word.text,translation.text)
-                    self.wait_for_element(10,By.ID, "introNext")
-                    self.get_element(By.ID,"introNext").click()
+                    picture = self.get_element(By.ID,"pictureThumbnail")
+                    if picture:
+                        # picture
+                        path = picture.get_attribute("src")
+                        print(f"{self.debug} PUT {os.path.basename(path)[:-4]} as translation")
+                        self.dictionary_put(os.path.basename(path)[:-4],translation.text,Picture=True)
+                    try:
+                        self.wait_for_element(10,By.ID, "introNext")
+                        self.get_element(By.ID,"introNext").click()
+                    except Exception as e:
+                        print(e)
+                        break
         else:
             print(f"{self.warn} Package has been already started before, words may not be in dictionary!")
         while self.get_element_text(By.ID, "backBtn") == "Späť":
@@ -582,112 +537,22 @@ class wocabot:
                 self.get_element(By.ID, "incorrect-next-button").click()
         else:
             print(f"{self.get_element_text(By.ID,'backBtn')} != 'Späť'")
-    
-    def track(self):
-        with open(self.tracker_path,"r",encoding="utf-8") as f:
-            tracker = json.load(f)
-        no = datetime.datetime.now()
-        while True:
-            leaderboard = self.get_leaderboard()
-            if os.name == "posix":
-                os.system("clear")
-            else:
-                os.system("cls")
-            now = f"{no.day}.{no.month}.{no.year} {no.hour}:{no.minute}"
-            names = []
-            for x in leaderboard:
-                
-                name = x["name"]
-                online = x["online"]
-                if online:
-                    names.append(name)
-                    if self.name in names:
-                        names.remove(self.name)
-                tracker.update({now:names})
-            print(f"{self.debug} (tracker) {now}: {names}")
-            if datetime.datetime.now().minute == no.minute + 10:
-                no = datetime.datetime.now()
-                print(f"{self.debug} (tracker) dumping...")
-                with open(self.tracker_path,"w",encoding="utf-8") as f:
-                    json.dump(tracker,f,indent=2)
-
+            while self.exists_element(self.driver,By.ID,"continueBtn"):
+                self.get_element(By.ID,"continueBtn").click()
+            try:
+                self.get_element(By.ID,"backBtn").click()
+            except:
+                pass
+    def get_package_completion(self,x):
+        wrapper = self.get_elements(By.CLASS_NAME,"circles-wrapper")
+        for _ in wrapper:
+            elems = _.find_elements(By.CLASS_NAME,"custom-icon")
+            print(x,_,len(elems))
+        return 3
 
     def leave_class(self):
         self.get_element(By.CLASS_NAME,"home-breadcrumb").click()
         time.sleep(0.5) # wait for webpage to load
-    def auto(self):
-        now = datetime.datetime.now()
-        offset = 0
-        while True:
-            if datetime.datetime.now().hour == now.hour+offset:
-                now = datetime.datetime.now()
-                if not self.args.classid:
-                    # check classes
-                    classes = self.get_classes()
-                    for id,clas in enumerate(classes):
-                        try:
-                            self.leave_class()
-                        except Exception:
-                            pass
-                        classes = self.get_classes()
-                        self.wocaclass = id
-                        self.pick_class(id,classes)
-                        # do packages in classes
-                        packages = self.get_packages(self.DOPACKAGE)
-                        while packages:
-                            self.pick_package(0,packages)
-                            self.do_package()
-                            time.sleep(2) # animations
-                            if self.exists_element(self.driver,By.ID,"continueBtn"):
-                                self.wait_for_element(5,By.ID,"continueBtn").click()
-                            while self.exists_element(self.driver,By.ID,"problem-words-next"):
-                                self.wait_for_element(5,By.ID,"problem-words-next").click()
-                            self.wait_for_element(5,By.ID,"backBtn").click()
-                            packages = self.get_packages(self.DOPACKAGE)
-                        # do the leaderboard stuff
-                        if self.args.leaderboardpos:
-                            pos = int(self.args.leaderboardpos)
-                            leaderboard = self.get_leaderboard()
-                            if leaderboard[pos-1]["name"] != self.name:
-                                target_points = int(leaderboard[pos-1]["points"])+1
-                                target_points = str(target_points)
-                                if not leaderboard[pos-1]["online"]:
-                                    self.package = 0
-                                    self.pick_package(self.package,self.get_packages(self.PRACTICE))
-                                    self.practice(target_points)
-                            time.sleep(2) # wait for leaderboard to update
-                    
-                    self.leave_class()
-                else:
-                    self.wocaclass = int(self.args.classid)
-                    classes = self.get_classes()
-                    self.pick_class(self.wocaclass,classes)
-                    # do packages in classes
-                    packages = self.get_packages(self.DOPACKAGE)
-                    while packages:
-                        self.pick_package(0,packages)
-                        self.do_package()
-                        time.sleep(2) # animations
-                        if self.exists_element(self.driver,By.ID,"continueBtn"):
-                            self.wait_for_element(5,By.ID,"continueBtn").click()
-                        while self.exists_element(self.driver,By.ID,"problem-words-next"):
-                            self.wait_for_element(5,By.ID,"problem-words-next").click()
-                        self.wait_for_element(5,By.ID,"backBtn").click()
-                        packages = self.get_packages(self.DOPACKAGE)
-                    # do the leaderboard stuff
-                    if self.args.leaderboardpos:
-                        pos = int(self.args.leaderboardpos)
-                        leaderboard = self.get_leaderboard()
-                        if leaderboard[pos-1]["name"] != self.name:
-                            target_points = int(leaderboard[pos-1]["points"])+1
-                            target_points = str(target_points)
-                            if not leaderboard[pos-1]["online"]:
-                                self.package = 0
-                                self.pick_package(self.package,self.get_packages(self.PRACTICE))
-                                self.practice(target_points)
-                        time.sleep(2) # wait for leaderboard to update
-                offset = 3
-
     def dictionary_get(self,word,*args,**kwargs):
         word = str(word)
         if not self.word_dictionary:
@@ -708,15 +573,18 @@ class wocabot:
             for x in dictionary:
                 if word == x:
                     for x in dictionary[x]:
+                        print("BBBBBBB",x,word)
                         if not x in end:
                             end.append(x)
                 elif word in dictionary[x]:
+                    print("AAAAAAA",x,word,dictionary[x])
                     if not x in end:
                         end.append(x)
         
         if end:
             if isinstance(end[0],list):
                 return end[0]
+        #print(f"{self.debug} {word} is {end} maybe please")
         print(f"{self.debug} (GET) {word} is {end}")
         return end
 
@@ -769,15 +637,99 @@ class wocabot:
         print(f"{self.debug} (PUT) {word} as {translation}")
         self._dictionary_Save()
 
+    def get_classes_from_dict(self):
+    
+        with open(self.dict_path,"r") as f:
+            dictionary = json.loads(f.read())
+        print(dictionary.keys())
+        return dictionary.keys()
+
+
     def _dictionary_Load(self):
-        with open(self.dictionary_path,"r") as f:
+        with open(self.dict_path,"r") as f:
             ext_dict = json.load(f)
         self.word_dictionary = ext_dict
         return ext_dict
     def _dictionary_Save(self):
-        with open(self.dictionary_path,"w") as f:
+        with open(self.dict_path,"w") as f:
             json.dump(self.word_dictionary,f,indent=2)
+
+
+
+
+def leaderboard():
+
+    end = ""
+    leaderboard = woca.get_leaderboard()
+    first_place = leaderboard[0]
+    for x in leaderboard:
+        end+=(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴':>5}) {x['points']:<3} (diff to #1 = {int(first_place['points'])-int(x['points']):>4}) {x['packages']}\n")
+    print(end)
+    woca.quit()
+
+
+def miesto(miesto:int):
+    leaderboard = woca.get_leaderboard()
+    nplace = leaderboard[miesto-1]
+    ourpoints = [x["points"] for x in leaderboard if x["name"] == woca.name][0]
+    if nplace["name"] != woca.name:
+        if int(nplace["points"]) > int(ourpoints):
+            target_points = int(nplace["points"]) - int(ourpoints)
+            woca.pick_package(0,woca.get_packages(woca.PRACTICE))
+            print(f"{woca.name} bude mať {nplace['points']} v {trieda} (#{miesto})")
+            woca.get_points(f"+{target_points}")
+            
+def bodiky(body: int):
+    woca.pick_package(0,woca.get_packages(woca.PRACTICE))
+    print(f"robim {body} wocapoints pre {woca.name}")
+    woca.get_points(f"+{body}")
+    woca.quit()
+
+
+def chybajuce_baliky(trieda: str,komu: str):
+    packages = woca.get_packages(woca.GETPACKAGE)
+    end = []
+    for package in packages:
+        items = package.items()
+        for name,playable in items:         
+            if playable:
+                end.append(name)
+    woca.quit()
+    print(end)
+    return end
+                
     
+def zrob_balik(package):
+    woca.pick_package(package,woca.get_packages(woca.DOPACKAGE))
+    while True:
+        try:
+            woca.do_package()
+        except Exception as e:
+            print(e)
+        else:
+            break
+
+def nauc_balik(trieda: str,komu: str):
+    pass
+
+def vsetky_baliky():
+    while woca.get_packages(woca.DOPACKAGE):
+        woca.pick_package(0,woca.get_packages(woca.DOPACKAGE))
+        while True:
+            try:
+                woca.do_package()
+            except Exception as e:
+                print(e)
+            else:
+                break
+        sleep(2)
+        if woca.exists_element(woca.driver,By.ID,"continueBtn"):
+            woca.get_element(By.ID,"continueBtn").click()
+        sleep(5)
+        if woca.exists_element(woca.driver,By.ID,"backBtn"):
+            print("yes")
+            if woca.get_element_text(By.ID,"backBtn") == "Uložiť a odísť":
+                woca.get_element(By.ID,"backBtn").click()
 
 parser = argparse.ArgumentParser(
                     prog='WocaBot',
@@ -787,19 +739,59 @@ parser = argparse.ArgumentParser(
 parser.add_argument("-u","--user","--username",dest="username",required=False) # debug
 parser.add_argument("-p","--pass","--password",dest="password",required=False) # debug
 parser.add_argument("--practice",action='store_true',dest="practice",required=False)
-parser.add_argument("--quickclick",action='store_true',dest="quickclick",required=False)
 parser.add_argument("--points",dest="target_points",required=False)
 parser.add_argument("--class",dest="classid",required=False)
 parser.add_argument("--package",dest="package",required=False)
 parser.add_argument("--do-package",action='store_true',dest="do_package",required=False)
 parser.add_argument("--learn-all",action="store_true",dest="learnall",required=False)
-parser.add_argument("--learn",action="store_true",dest="learn",required=False)
 parser.add_argument("--get-classes","--classes",action="store_true",dest="getclasses",required=False)
 parser.add_argument("--get-packages","--packages",action="store_true",dest="getpackages",required=False)
 parser.add_argument("--get-leaderboard","--leaderboard",action="store_true",dest="leaderboard")
-parser.add_argument("--track",action="store_true",dest="tracker",required=False)
 parser.add_argument("--auto",action="store_true",dest="auto",required=False)
-parser.add_argument("--leaderboard-pos",dest="leaderboardpos",required=False)
+parser.add_argument("--leaderboard",dest="leaderboardpos",required=False)
+parser.add_argument("--leaderboard-pos","--pos",action="store_true",dest="pos",required=False)
 args = parser.parse_args()
 
-Wocabot = wocabot(username=args.username,password=args.password,args=args)
+
+woca = wocabee(udaje=(args.username,args.password))
+woca.init()
+if args.getclasses:
+    for i,x in enumerate(woca.get_classes()):
+        print(i,x)
+    woca.quit()
+if args.getpackages:
+    for i,x in enumerate(woca.get_packages(woca.GETPACKAGE)):
+        print(i,x)
+    woca.quit()
+if not args.classid:
+    print("you need to specify class id")
+    exit(1)
+
+
+
+
+woca.pick_class(args.classid,woca.get_classes())
+if args.practice:
+    if not args.target_points:
+        args.target_points = input("points:")
+    
+    bodiky(args.target_points)
+if args.do_package:
+    if not args.package:
+        print("you need to specify package (--packages).")
+        exit(1)
+if args.learnall:
+    woca.learnALL()
+if args.leaderboard:
+    woca.get_leaderboard()
+
+if args.auto:
+    vsetky_baliky()
+    woca.quit()
+
+if args.leaderboardpos:
+    if not args.pos:
+        print("you need to specify a position (--pos)")
+        exit(1)
+    miesto(int(args.pos))
+    woca.quit()
