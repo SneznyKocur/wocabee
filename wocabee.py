@@ -10,6 +10,7 @@ from selenium.webdriver.common import actions
 import time, json, os, datetime,threading
 from selenium.webdriver.common.by import By
 from selenium import webdriver
+import traceback
 
 class wocabee:
     def __init__(self,udaje: tuple):
@@ -31,7 +32,13 @@ class wocabee:
         self.LEARNALL = 3
         self.GETPACKAGE = 4
         self.udaje = udaje
-        self.driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()))
+        try:
+            service = GeckoDriverManager().install()
+            self.driver = webdriver.Firefox(service=FirefoxService(service))
+        except Exception as e:
+            traceback.print_exception(e)
+            self.driver = webdriver.Firefox()
+    
         self.driver.get(self.url)
     def init(self):
         self.word_dictionary = self._dictionary_Load()
@@ -39,18 +46,21 @@ class wocabee:
         username,password = self.udaje
         print(f"{self.ok} Logging in... {username}")
         # HACK:
-        try:
-            self.login(username,password)
-        except:
-            pass
-        if not self.is_loggedIn():
+        attempts = 0
+        logged_in = False
+        while not logged_in and attempts < 5:
             try:
                 self.login(username,password)
             except:
                 pass
-            if not self.is_loggedIn():
-                print("no login :sob:")
-                self.driver.quit()
+        
+            if self.is_loggedIn():
+                logged_in = True
+            else:
+                attempts+=1
+        if not self.is_loggedIn():
+            print("no login :sob:")
+            self.driver.quit()
         self.name = self.get_elements_text(By.TAG_NAME,"b")[0]
         for id,Class in enumerate(self.get_classes()):
             self.class_names.append(Class[id].find_element(By.TAG_NAME,"span").text)
@@ -129,32 +139,42 @@ class wocabee:
         time.sleep(2) # loading times
 
     # leaderboard
+    # TODO: FIX THIS
     def get_leaderboard(self):
+        # self.wait_for_element(10,By.ID,"standardView")
+        # leaderboard = []
+        # magic = len(self.get_packages(self.GETPACKAGE))
+        # for i in range(len(self.wait_for_element(5,By.ID,"listOfStudentsWrapper").find_elements(By.CLASS_NAME,"wb-tr"))):
+        #     self.wait_for_element(10,By.ID,"standardView")
+        #     try:
+        #         online = False
+        #         if self.exists_element(self.wait_for_elements_in_element(5,self.wait_for_element(5,By.ID,"listOfStudentsWrapper"),By.CLASS_NAME,"wb-tr")[i].find_element(By.CLASS_NAME,"status-icon-wrapper"),By.CLASS_NAME,"status-online"):
+        #             online = True
+        #         elif self.exists_element(self.wait_for_elements_in_element(5,self.wait_for_element(5,By.ID,"listOfStudentsWrapper"),By.CLASS_NAME,"wb-tr")[i].find_element(By.CLASS_NAME,"status-icon-wrapper"),By.CLASS_NAME,"status-offline"):
+        #             online = False
+        #         name = ""
+        #         place = 0
+        #         points = 0
+        #         z = [x.text for x in self.wait_for_elements_in_element(5,self.wait_for_elements_in_element(5,self.wait_for_element(5,By.ID,"listOfStudentsWrapper"),By.CLASS_NAME,"wb-tr")[i],By.TAG_NAME,"td")[magic*4:]]
+        #         names = z[i*4]
+        #         name = names.split("\n")[2]
+        #         place = names.split("\n")[0]
+        #         points = z[i*4+2]
+        #         packages = z[i*4+3]
+        #     except Exception as e:
+        #         self.driver.save_screenshot("screenshot.png")
+        #         print(e)
+        #     leaderboard.append({"place":place,"name":name,"points":points,"online":online,"packages":packages})
+        # return leaderboard
+        table_body = self.get_element(By.ID,"tbody")
+        students = table_body.find_elements(By.CLASS_NAME,"wb-tr")
         leaderboard = []
-        time.sleep(1)
-        wrapper = self.wait_for_element(5,By.ID,"listOfStudentsWrapper")
-        magic = len(self.get_packages(self.GETPACKAGE))
-        for i in range(len(wrapper.find_elements(By.CLASS_NAME,"wb-tr"))):
-            elem2 = self.wait_for_elements_in_element(5,wrapper,By.CLASS_NAME,"wb-tr")[i]
-            try:
-                
-                elem3 = elem2.find_element(By.CLASS_NAME,"status-icon-wrapper")
-                online = False
-                if self.exists_element(elem3,By.CLASS_NAME,"status-online"):
-                    online = True
-                elif self.exists_element(elem3,By.CLASS_NAME,"status-offline"):
-                    online = False
-                name = ""
-                place = 0
-                points = 0
-                z = [x.text for x in self.wait_for_elements_in_element(5,elem2,By.TAG_NAME,"td")[magic*4:]]
-                names = z[i*4]
-                name = names.split("\n")[2]
-                place = names.split("\n")[0]
-                points = z[i*4+2]
-                packages = z[i*4+3]
-            except Exception as e:
-                print(e)
+        for student in students:
+            place = student.find_element(By.CLASS_NAME,"place").text
+            name = student.find_element(By.CLASS_NAME,"name").text
+            online = "status-online" in student.find_element(By.CLASS_NAME,"status-icon").get_attribute("class")      
+            points = student.find_elements(By.TAG_NAME,"td")[2].text
+            packages = student.find_elements(By.TAG_NAME,"td")[3] .text
             leaderboard.append({"place":place,"name":name,"points":points,"online":online,"packages":packages})
         return leaderboard
     #packages
@@ -209,9 +229,9 @@ class wocabee:
         
         print(f"{self.info} Doing {difference} wocapoints ({wocapoints} -> {target_wocapoints})")
 
-        levelToggle = self.driver.find_element(By.ID,"levelToggle")
+        #levelToggle = self.driver.find_element(By.ID,"levelToggle")
         #levelToggle.click()
-        ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
+        #ActionChains(self.driver).move_to_element(levelToggle).click(levelToggle).perform()
 
         # pbar = tqdm(total=self.calculate_words(difference))
         #for _ in range(int(difference / 2)):
@@ -264,10 +284,13 @@ class wocabee:
             return
         end = ""
         index = 0
-        for i in missing.count("_"):
+        print(f"{self.debug} {missing.count("_")}")
+        for _ in range(missing.count("_")+1):
             x = missing.find("_",index)
+            print(f"{self.debug} {x} {_} {word[x]} {index}")
             end+=word[x]
-            index = x
+            index = x+1
+
         return end
 
     def do_exercise(self):
@@ -314,7 +337,7 @@ class wocabee:
             print(f"{self.debug} choose word")
             self._ch_word()
         if self.exists_element(self.driver,By.ID,"completeWord"):
-            print(f"{self.debug} complete wodrd")
+            print(f"{self.debug} complete word")
             self._complete_word()
         if self.exists_element(self.driver,By.ID,"oneOutOfMany"):
             print(f"{self.debug} one out of many")
@@ -327,7 +350,7 @@ class wocabee:
         if self.exists_element(self.driver,By.ID,"incorrect-next-button"):
             word = self.get_element_text(By.CLASS_NAME,"correctWordQuestion")
             translation = self.get_element_text(By.CLASS_NAME,"correctWordAnswer")
-            self.dictionary_put(word,translation,self.package)
+            self.dictionary_put(word,translation)
             self.get_element(By.ID,"incorrect-next-button").click()
     def _choose_picture(self):
         while True:
@@ -377,15 +400,17 @@ class wocabee:
         word = self.get_element_text(By.ID,"completeWordQuestion")
         miss = self.get_element_text(By.ID,"completeWordAnswer")
         preklady = self.dictionary_get(word,self.package)
+        print(preklady)
         if preklady:
             for x in preklady:
                 if len(miss) == len(x):
                     preklad = x
+        print(f"{self.debug} {preklad} {word} {miss}")
         self.get_element(By.ID,"completeWordAnswer").send_keys("".join(self.find_missing_letters(miss,preklad)))
         try:
             self.wait_for_element(5,By.ID,"completeWordSubmitBtn").click()
         except Exception as e:
-            print(e)
+            print(traceback.format_exception(e))
     def _pariky(self):
         questions = self.get_elements(By.CLASS_NAME,"fp_q") # btn-success
         questiontexts = [x.text for x in questions]
@@ -436,7 +461,7 @@ class wocabee:
                     x.click()
                     text = x.find_elements(By.CLASS_NAME,"pexesoBack")[0].text
                     answertexts.append(text)
-                    end.append((x,questions[questiontexts.index(text)]))
+                    end.append((x,questions[questiontexts.index(self.dictionary_get(text)[0])]))
                 
                 
                 time.sleep(0.2) # make this not a double click
@@ -451,10 +476,10 @@ class wocabee:
                 #             elem2.click()
                 #             elem2.click()
                 for x in end:
-                    end[0].click()
-                    end[0].click()
-                    end[1].click()
-                    end[1].click()
+                    x[0].click()
+                    x[0].click()
+                    x[1].click()
+                    x[1].click()
             except Exception as e:
                 print(e)
     def _complete_veta(self):
@@ -493,12 +518,10 @@ class wocabee:
         for i,x in enumerate(words):
             sortable = self.get_elements(By.CLASS_NAME,"word-to-arrange")
             sortable_text = [x.text for x in sortable]
-            
-            print(word,translated,sortable,sortable_text,words)
-            
-            for i,x in enumerate(words):
+            if x != sortable_text[i]:
                 print(f"Moving: {x} -> {sortable_text[i]}")
-                ActionChains(self.driver).drag_and_drop(sortable[sortable_text.index(x)],sortable[i])
+                ActionChains(self.driver).drag_and_drop(sortable[sortable_text.index(x)],sortable[i]).perform()
+        self.get_element(By.ID,"arrangeWordsSubmitBtn").click()
     def do_package(self):
         print(f"{self.ok} Doing Package...")
         if self.exists_element(self.driver, By.ID, "introRun"):
@@ -541,12 +564,6 @@ class wocabee:
                 self.get_element(By.ID,"backBtn").click()
             except:
                 pass
-    def get_package_completion(self,x):
-        wrapper = self.get_elements(By.CLASS_NAME,"circles-wrapper")
-        for _ in wrapper:
-            elems = _.find_elements(By.CLASS_NAME,"custom-icon")
-            print(x,_,len(elems))
-        return len(elems)
 
     def leave_class(self):
         self.get_element(By.CLASS_NAME,"home-breadcrumb").click()

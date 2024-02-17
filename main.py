@@ -1,10 +1,9 @@
-from tqdm import tqdm
 import argparse
 from selenium.webdriver.common.by import By
 from time import sleep
 import getpass
 from wocabee import wocabee
-
+import traceback
 #TODO: GUI
 
 """
@@ -32,9 +31,10 @@ def leaderboard():
 
     end = ""
     leaderboard = woca.get_leaderboard()
+    #print(f"{woca.debug} {leaderboard}")
     first_place = leaderboard[0]
     for x in leaderboard:
-        end+=(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴':>5}) {x['points']:<3} (diff to #1 = {int(first_place['points'])-int(x['points']):>4}) {x['packages']}\n")
+        end+=(f"#{x['place']:<2}: {x['name']:<20} ({'🟢' if x['online'] else '🔴'}) {x['points']:<5} (diff to #1 = {int(first_place['points'])-int(x['points']):>5}) {x['packages']}\n")
     print(end)
     woca.quit()
 
@@ -90,7 +90,7 @@ def vsetky_baliky():
             try:
                 woca.do_package()
             except Exception as e:
-                print(e)
+                print(traceback.format_exception(e))
             else:
                 break
         sleep(2)
@@ -152,7 +152,7 @@ if args.do_package:
 if args.learnall:
     woca.learnALL()
 if args.leaderboard:
-    woca.get_leaderboard()
+    leaderboard()
 
 if args.auto:
     vsetky_baliky()
