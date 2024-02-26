@@ -5,10 +5,9 @@ import threading
 from time import sleep
 from selenium.webdriver.common.by import By
 users = [
-    # insert users here 
-    # (username, password),...
+    """(username, password),..."""
 ]
-def vsetky_baliky():
+def vsetky_baliky(woca):
     while woca.get_packages(woca.DOPACKAGE):
         woca.pick_package(0,woca.get_packages(woca.DOPACKAGE))
         while True:
@@ -31,15 +30,17 @@ def vsetky_baliky():
 def do_wocabee(user):
     woca = wocabee.wocabee(user)
     woca.init()
+    print(woca.name)
     for x in range(len(woca.get_classes())):
         woca.pick_class(x,woca.get_classes())
-        vsetky_baliky()
+        vsetky_baliky(woca)
         woca.leave_class()
     woca.quit()
 
-while True:
-    if datetime.datetime.now().weekday() == 0 or 6: # if today is monday or sunday
-        for x in users:
-            thread = threading.Thread(do_wocabee,args=(x,))
-            thread.start()
-    
+#while True:
+    #if datetime.datetime.now().weekday() == 0 or 6: # if today is monday or sunday
+for x in users:
+    print(x)
+    thread = threading.Thread(target=do_wocabee,args=(x,))
+    thread.start()
+thread.join()
