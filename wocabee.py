@@ -32,12 +32,12 @@ class wocabee:
         self.LEARNALL = 3
         self.GETPACKAGE = 4
         self.udaje = udaje
-        try:
-            service = GeckoDriverManager().install()
-            self.driver = webdriver.Firefox(service=FirefoxService(service))
-        except Exception as e:
-            traceback.print_exception(e)
-            self.driver = webdriver.Firefox()
+        #try:
+        #    service = GeckoDriverManager().install()
+        #    self.driver = webdriver.Firefox(service=FirefoxService(service))
+        #except Exception as e:
+        #    traceback.print_exception(e)
+        self.driver = webdriver.Firefox()
     
         self.driver.get(self.url)
     def init(self):
@@ -122,7 +122,7 @@ class wocabee:
     def wait_for_elements_in_element(self,timeout,elem,by,element):
         WebDriverWait(self.driver,timeout).until(lambda x: elem.find_element(by,element).is_displayed())
         return self.get_elements(by,element)
-    # class
+    # class 
     def get_classes(self) -> list:
         classesList = []
         classes = self.wait_for_element(5,By.ID,"listOfClasses")
@@ -651,14 +651,6 @@ class wocabee:
         
         print(f"{self.debug} (PUT) {word} as {translation}")
         self._dictionary_Save()
-
-    def get_classes_from_dict(self):
-    
-        with open(self.dict_path,"r") as f:
-            dictionary = json.loads(f.read())
-        print(dictionary.keys())
-        return dictionary.keys()
-
 
     def _dictionary_Load(self):
         with open(self.dict_path,"r") as f:
