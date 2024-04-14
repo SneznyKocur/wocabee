@@ -364,7 +364,7 @@ class wocabee:
                 print(word,word_translation,"CLICKING")
                 picture.click()
                 picture.click()
-            elif self.dictionary_get(word)[0] == word_translation:
+            elif word_translation in self.dictionary_get(word):
                 print(word,word_translation,"CLICKING")
                 picture.click()
                 picture.click()
@@ -461,7 +461,12 @@ class wocabee:
                     x.click()
                     text = x.find_elements(By.CLASS_NAME,"pexesoBack")[0].text
                     answertexts.append(text)
-                    end.append((x,questions[questiontexts.index(self.dictionary_get(text)[0])]))
+                    for x in self.dictionary_get(text):
+                        if x in questiontexts:
+                            end.append((x,questions[questiontexts.index(x)]))
+                            break
+
+                    
                 
                 
                 time.sleep(0.2) # make this not a double click
@@ -505,6 +510,7 @@ class wocabee:
             self.get_element(By.ID,"addMissingWordSubmitBtn").click()
     def _arrange_words(self):
         word = self.get_element_text(By.ID,"def-lang-sentence")
+        # FIXME: what if the translation is not the first word here
         translated = self.dictionary_get(word)[0]
         words = translated.split(" ")
         ponctuation = self.get_element_text(By.ID,"static-punctuation")
@@ -543,7 +549,7 @@ class wocabee:
                         self.wait_for_element(10,By.ID, "introNext")
                         self.get_element(By.ID,"introNext").click()
                     except Exception as e:
-                        print(e)
+                        print(traceback.format_exception(e))
                         break
         else:
             print(f"{self.warn} Package has been already started before, words may not be in dictionary!")

@@ -76,7 +76,7 @@ def zrob_balik(package):
         try:
             woca.do_package()
         except Exception as e:
-            print(e)
+            print(traceback.format_exception(e))
         else:
             break
 
