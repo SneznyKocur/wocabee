@@ -368,6 +368,7 @@ class wocabee:
                 picture.click()
                 picture.click()
             elif word_translation in self.dictionary_get(word):
+            elif word_translation in self.dictionary_get(word):
                 print(word,word_translation,"CLICKING")
                 picture.click()
                 picture.click()
