@@ -11,7 +11,7 @@ import time, json, os, datetime,threading
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 import traceback
-
+from selenium.webdriver.firefox.options import Options
 class wocabee:
     def __init__(self,udaje: tuple):
         self.url = "https://wocabee.app/app"
@@ -37,7 +37,10 @@ class wocabee:
         #    self.driver = webdriver.Firefox(service=FirefoxService(service))
         #except Exception as e:
         #    traceback.print_exception(e)
-        self.driver = webdriver.Firefox()
+        options = Options()
+        options.headless = True
+        options.add_argument("--headless")
+        self.driver = webdriver.Firefox(options=options)
     
         self.driver.get(self.url)
     def init(self):
@@ -364,7 +367,7 @@ class wocabee:
                 print(word,word_translation,"CLICKING")
                 picture.click()
                 picture.click()
-            elif self.dictionary_get(word)[0] == word_translation:
+            elif word_translation in self.dictionary_get(word):
                 print(word,word_translation,"CLICKING")
                 picture.click()
                 picture.click()
@@ -461,7 +464,12 @@ class wocabee:
                     x.click()
                     text = x.find_elements(By.CLASS_NAME,"pexesoBack")[0].text
                     answertexts.append(text)
-                    end.append((x,questions[questiontexts.index(self.dictionary_get(text)[0])]))
+                    for z in self.dictionary_get(text):
+                        if z in questiontexts:
+                            end.append((x,questions[questiontexts.index(z)]))
+                            break
+
+                    
                 
                 
                 time.sleep(0.2) # make this not a double click
@@ -505,6 +513,7 @@ class wocabee:
             self.get_element(By.ID,"addMissingWordSubmitBtn").click()
     def _arrange_words(self):
         word = self.get_element_text(By.ID,"def-lang-sentence")
+        # FIXME: what if the translation is not the first word here
         translated = self.dictionary_get(word)[0]
         words = translated.split(" ")
         ponctuation = self.get_element_text(By.ID,"static-punctuation")
@@ -543,7 +552,7 @@ class wocabee:
                         self.wait_for_element(10,By.ID, "introNext")
                         self.get_element(By.ID,"introNext").click()
                     except Exception as e:
-                        print(e)
+                        print(traceback.format_exception(e))
                         break
         else:
             print(f"{self.warn} Package has been already started before, words may not be in dictionary!")

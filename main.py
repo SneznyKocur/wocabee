@@ -119,6 +119,7 @@ parser.add_argument("--get-packages","--packages",action="store_true",dest="getp
 parser.add_argument("--get-leaderboard","--leaderboard",action="store_true",dest="leaderboard")
 parser.add_argument("--auto",action="store_true",dest="auto",required=False)
 parser.add_argument("--leaderboard-pos","--pos",action="store_true",dest="pos",required=False)
+parser.add_argument("--learn", action="store_true",dest="learn",required=False)
 args = parser.parse_args()
 
 
@@ -162,3 +163,9 @@ if args.auto:
 if args.pos:
     miesto(int(args.pos))
     woca.quit()
+if args.learn:
+    if not args.package:
+        print("you need to specify package (--packages).")
+        exit(1)
+    woca.pick_package(args.package,woca.get_packages(woca.LEARN))
+    woca.learn()
