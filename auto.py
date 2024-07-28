@@ -4,6 +4,7 @@ import traceback
 import threading
 from time import sleep
 from selenium.webdriver.common.by import By
+import getpass
 users = [
     """(username, password),..."""
 ]
@@ -39,8 +40,12 @@ def do_wocabee(user):
 
 #while True:
     #if datetime.datetime.now().weekday() == 0 or 6: # if today is monday or sunday
+if not users:
+    username = input("username:")
+    password = getpass.getpass("password:")
+    users.append((username,password)
 for x in users:
-    print(x)
+    print(x[0]) # display username
     thread = threading.Thread(target=do_wocabee,args=(x,))
     thread.start()
 thread.join()
