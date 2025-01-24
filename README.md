@@ -6,5 +6,6 @@
 
 - Download as zip and extract or:`git clone https://github.com/sneznykocur/wocabot`
 - install selenium:`pip install selenium webdriver-manager`
-### UPDATE
-NOW A [WEBSITE](https://wocabee.sneznykocur.sk)
+~~### UPDATE~~
+~~NOW A [WEBSITE](https://wocabee.sneznykocur.sk)~~
+
