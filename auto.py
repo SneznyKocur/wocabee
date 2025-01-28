@@ -43,7 +43,7 @@ def do_wocabee(user):
 if not users:
     username = input("username:")
     password = getpass.getpass("password:")
-    users.append((username,password)
+    users.append((username,password))
 for x in users:
     print(x[0]) # display username
     thread = threading.Thread(target=do_wocabee,args=(x,))
