@@ -182,31 +182,55 @@ class wocabee:
         return leaderboard
     #packages
     def get_packages(self, prac):
+        """Get list of available packages based on practice type"""
         prac = int(prac)
-        packageslist = []
-        if self.exists_element(self.driver, By.ID, "showMorePackagesBtn"):
-            self.get_element(By.ID, "showMorePackagesBtn").click()
+        packages = []
         elements = self.get_elements(By.CLASS_NAME, "pTableRow")
-        for i, elem in enumerate(elements):
-            if prac == self.GETPACKAGE and self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
-                name = elem.find_element(By.CLASS_NAME, "package-name").text
-                playable = True
-            elif prac == self.PRACTICE and self.exists_element(elem, By.CLASS_NAME, "fa-gamepad"):
-                button = elem.find_element(By.CLASS_NAME, "btn-primary")
-                packageslist.append({i: button})
-                continue
-            elif prac == self.DOPACKAGE and self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
-                button = elem.find_element(By.CLASS_NAME, "package ").find_element(By.TAG_NAME, "a")
-                id = len(packageslist)
-                packageslist.append({id: button})
-                continue
-            elif prac == self.LEARN or prac == self.LEARNALL and self.exists_element(elem, By.TAG_NAME, "a"):
-                button = elem.find_element(By.TAG_NAME, "a")
-                packageslist.append({i: button})
-                continue
-            if prac == self.GETPACKAGE:
-                packageslist.append({name: playable})
-        return packageslist
+        if not elements:
+            return packages
+
+        if prac == self.GETPACKAGE:
+            def process_package(elem):
+                try:
+                    name = elem.find_element(By.CLASS_NAME, "package-name").text
+                    playable = self.exists_element(elem, By.CLASS_NAME, "fa-play-circle")
+                    return {name: playable}
+                except:
+                    return None
+                    
+            futures = [self.executor.submit(process_package, elem) for elem in elements]
+            packages = [f.result() for f in futures if f.result()]
+
+        elif prac == self.PRACTICE:
+            elements = elements[:10]  # Only first 10 for practice
+            for i, elem in enumerate(elements):
+                if self.exists_element(elem, By.CLASS_NAME, "fa-gamepad"):
+                    try:
+                        button = elem.find_element(By.CLASS_NAME, "btn-primary")
+                        packages.append({i: button})
+                    except:
+                        continue
+
+        elif prac == self.DOPACKAGE:
+            for i, elem in enumerate(elements):
+                if self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
+                    try:
+                        button = elem.find_element(By.CLASS_NAME, "package").find_element(By.TAG_NAME, "a")
+                        packages.append({len(packages): button})
+                    except:
+                        continue
+
+        elif prac in (self.LEARN, self.LEARNALL):
+            for i, elem in enumerate(elements):
+                if self.exists_element(elem, By.TAG_NAME, "a"):
+                    try:
+                        button = elem.find_element(By.TAG_NAME, "a")
+                        packages.append({i: button})
+                    except:
+                        continue
+
+        return packages
+
     
     def pick_package(self,package_id,packages):
         package_id = int(package_id)
