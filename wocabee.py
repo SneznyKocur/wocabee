@@ -181,35 +181,33 @@ class wocabee:
             leaderboard.append({"place":place,"name":name,"points":points,"online":online,"packages":packages})
         return leaderboard
     #packages
-    def get_packages(self,prac):
+    def get_packages(self, prac):
         prac = int(prac)
         packageslist = []
-        if self.exists_element(self.driver,By.ID,"showMorePackagesBtn"):
-            self.get_element(By.ID,"showMorePackagesBtn").click()
-        if prac == self.GETPACKAGE:
-            for elem in self.get_elements(By.CLASS_NAME,"pTableRow"):
-                name = elem.find_element(By.CLASS_NAME,"package-name").text
-                playable = self.exists_element(elem,By.CLASS_NAME,"fa-play-circle")
-                packageslist.append({name:playable})
-
-        elif prac == self.PRACTICE:
-            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")):
-                if self.exists_element(elem,By.CLASS_NAME,"fa-gamepad"):
-                    button = elem.find_element(By.CLASS_NAME,"btn-primary")
-                    packageslist.append({i:button})
-
-        elif prac == self.DOPACKAGE:
-            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")):
-                if self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
-                    button = elem.find_element(By.CLASS_NAME,"package ").find_element(By.TAG_NAME,"a")
-                    id = len(packageslist)
-                    packageslist.append({id:button})
-        elif prac == self.LEARN or prac == self.LEARNALL:
-            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")):
-                if self.exists_element(elem,By.TAG_NAME,"a"):
-                    button = elem.find_element(By.TAG_NAME,"a")
-                    packageslist.append({i:button})
+        if self.exists_element(self.driver, By.ID, "showMorePackagesBtn"):
+            self.get_element(By.ID, "showMorePackagesBtn").click()
+        elements = self.get_elements(By.CLASS_NAME, "pTableRow")
+        for i, elem in enumerate(elements):
+            if prac == self.GETPACKAGE and self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
+                name = elem.find_element(By.CLASS_NAME, "package-name").text
+                playable = True
+            elif prac == self.PRACTICE and self.exists_element(elem, By.CLASS_NAME, "fa-gamepad"):
+                button = elem.find_element(By.CLASS_NAME, "btn-primary")
+                packageslist.append({i: button})
+                continue
+            elif prac == self.DOPACKAGE and self.exists_element(elem, By.CLASS_NAME, "fa-play-circle"):
+                button = elem.find_element(By.CLASS_NAME, "package ").find_element(By.TAG_NAME, "a")
+                id = len(packageslist)
+                packageslist.append({id: button})
+                continue
+            elif prac == self.LEARN or prac == self.LEARNALL and self.exists_element(elem, By.TAG_NAME, "a"):
+                button = elem.find_element(By.TAG_NAME, "a")
+                packageslist.append({i: button})
+                continue
+            if prac == self.GETPACKAGE:
+                packageslist.append({name: playable})
         return packageslist
+    
     def pick_package(self,package_id,packages):
         package_id = int(package_id)
         print(packages,package_id)
