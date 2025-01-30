@@ -184,6 +184,8 @@ class wocabee:
     def get_packages(self,prac):
         prac = int(prac)
         packageslist = []
+        if self.exists_element(self.driver,By.ID,"showMorePackagesBtn"):
+            self.get_element(By.ID,"showMorePackagesBtn").click()
         if prac == self.GETPACKAGE:
             for elem in self.get_elements(By.CLASS_NAME,"pTableRow"):
                 name = elem.find_element(By.CLASS_NAME,"package-name").text
@@ -191,7 +193,7 @@ class wocabee:
                 packageslist.append({name:playable})
 
         elif prac == self.PRACTICE:
-            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")[:10]):
+            for i,elem in enumerate(self.get_elements(By.CLASS_NAME,"pTableRow")):
                 if self.exists_element(elem,By.CLASS_NAME,"fa-gamepad"):
                     button = elem.find_element(By.CLASS_NAME,"btn-primary")
                     packageslist.append({i:button})
