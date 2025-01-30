@@ -150,6 +150,7 @@ if args.do_package:
     if not args.package:
         print("you need to specify package (--packages).")
         exit(1)
+    zrob_balik(args.package)
 if args.learnall:
     woca.learnALL()
 if args.leaderboard:
