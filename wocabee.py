@@ -185,6 +185,8 @@ class wocabee:
         """Get list of available packages based on practice type"""
         prac = int(prac)
         packages = []
+        if self.exists_element(self.driver,By.ID,"showMorePackagesBtn"):
+            self.get_element(By.ID,"showMorePackagesBtn").click()
         elements = self.get_elements(By.CLASS_NAME, "pTableRow")
         if not elements:
             return packages
